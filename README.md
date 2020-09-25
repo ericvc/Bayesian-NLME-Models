@@ -67,8 +67,6 @@ commonly applied to model the growth trajectories of plants and animals.
 Here I give an example using longitudinal observations of individual
 Loblolly pine trees. All parameters are treated as random-effects.
 
-![](three_param.gif)
-
 The data for this task come from the `datasets` package. Tree height
 measurements were collected from 14 different trees at 3, 5, 10, 15, 20,
 and 25 years of age.
@@ -173,9 +171,9 @@ ggplot() +
 
 ![](README_files/figure-gfm/logistic3_plot-1.png)<!-- -->
 
-## Five Parameter Model
+![](figures/three_param.gif)
 
-![](five_param.gif)
+## Five Parameter Model
 
 ``` r
 logistic5 <- function(t1, t2, t3, t4, t5, x, tau){
@@ -329,6 +327,9 @@ ggplot() +
 
 ![](README_files/figure-gfm/logistic5_plot-1.png)<!-- -->
 
+![](figures/five_param.gif)
+
+
 ## Six Parameter Model
 
 This version is actually a modified version of the five parameter model,
@@ -338,9 +339,9 @@ with an extra parameter \(\theta_6\) that allows for a second asymptote
 on the right side of the function that can be greater than \(\theta_1\)
 (\(\theta_6\) \> 1) or less than \(\theta_1\) (\(\theta_6\) \< 1)
 
-![](six_param.gif)
+![](README_files/figure-gfm/logistic6_fit-1.png)
 
-![](README_files/figure-gfm/logistic6_fit-1.png)<!-- -->
+![](figures/six_param.gif)
 
 ``` r
 #Get posterior samples from fitted model

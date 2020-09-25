@@ -21,8 +21,6 @@ I thought I would share some old code I stumbled upon for fitting Bayesian non-l
 
 The traditional logistic curve is widely used for modeling data, and you may also recognize it as the same function used as the activation for the output layer of a neural net binary classifier. Logistic curves are commonly applied to model the growth trajectories of plants and animals. Here I give an example using longitudinal observations of individual Loblolly pine trees. All parameters are treated as random-effects.
 
-![](three_param.gif)
-
 The data for this task come from the `datasets` package. Tree height measurements were collected from 14 different trees at 3, 5, 10, 15, 20, and 25 years of age.
 
 ```{r logi_3 data}
@@ -125,9 +123,9 @@ ggplot() +
   scale_y_continuous("Height (ft)")
 ```
 
-## Five Parameter Model
+![](figures/three_param.gif)
 
-![](five_param.gif)
+## Five Parameter Model
 
 ```{r logistic5_fit, warning=FALSE}
 
@@ -248,17 +246,6 @@ y_ci <-
 dy = cbind(xs,y_est, t(y_ci)) %>%
   data.frame()
 
-#Model predictions
-# pars <- grep("y_hat", attr(post, "names"))
-# y_hat <- post[,pars] %>% 
-#   colMeans %>%
-#   data.frame(y=.)
-# y_hat$id <- stan_data$id
-# y_hat$x <- stan_data$x
-# y_hat$type = "y_hat"
-# y_data$type <- "y_obs"
-# d2 <- rbind(y_data, y_hat)
-
 ggplot() +
   theme_light() +
   ggtitle("5-Parameter Logistic Model") +
@@ -279,11 +266,11 @@ ggplot() +
   scale_y_continuous("x")
 ```
 
+![](figures/five_param.gif)
+
 ## Six Parameter Model
 
 This version is actually a modified version of the five parameter model, and was not included in Pinheiro and Bates (2000). Like the previous model, the function is simply two logistic curves added together, but with an extra parameter $\theta_6$ that allows for a second asymptote on the right side of the function that can be greater than $\theta_1$ ($\theta_6$ > 1) or less than $\theta_1$ ($\theta_6$ < 1)
-
-![](six_param.gif)
 
 ```{r logistic6_fit, echo=FALSE, warning=FALSE}
 
@@ -427,6 +414,7 @@ ggplot() +
   scale_x_continuous("y") +
   scale_y_continuous("x")
 ```
+![](figures/six_param.gif)
 
 ## Stan Code
 
