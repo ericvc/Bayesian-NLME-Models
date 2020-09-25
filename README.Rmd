@@ -1,88 +1,41 @@
-Bayesian Non-Linear Mixed-Effects Models in Stan
-================
+---
+title: "Bayesian Non-Linear Mixed-Effects Models in Stan"
+output: github_document
+---
 
-``` r
+```{r load_packages}
 library(rstan)
-```
-
-    ## Loading required package: StanHeaders
-
-    ## Loading required package: ggplot2
-
-    ## rstan (Version 2.19.2, GitRev: 2e1f913d3ca3)
-
-    ## For execution on a local, multicore CPU with excess RAM we recommend calling
-    ## options(mc.cores = parallel::detectCores()).
-    ## To avoid recompilation of unchanged Stan programs, we recommend calling
-    ## rstan_options(auto_write = TRUE)
-
-``` r
 library(ggplot2)
 library(tidyverse)
-```
-
-    ## ── Attaching packages ────────────────────────────────────────────────────────────────────── tidyverse 1.3.0 ──
-
-    ## ✓ tibble  3.0.1     ✓ dplyr   0.8.5
-    ## ✓ tidyr   1.0.3     ✓ stringr 1.4.0
-    ## ✓ readr   1.3.1     ✓ forcats 0.5.0
-    ## ✓ purrr   0.3.4
-
-    ## ── Conflicts ───────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
-    ## x tidyr::extract() masks rstan::extract()
-    ## x dplyr::filter()  masks stats::filter()
-    ## x dplyr::lag()     masks stats::lag()
-
-``` r
 library(datasets)
 library(stringr)
 library(HDInterval)
 library(reshape)
 ```
 
-    ## 
-    ## Attaching package: 'reshape'
-
-    ## The following object is masked from 'package:dplyr':
-    ## 
-    ##     rename
-
-    ## The following objects are masked from 'package:tidyr':
-    ## 
-    ##     expand, smiths
-
 ## Introduction
 
-I thought I would share some old code I stumbled upon for fitting
-Bayesian non-linear mixed effect models with Stan and R. The model code
-can be found in the `non_linear.stan` file or at the bottom of this
-README.
+I thought I would share some old code I stumbled upon for fitting Bayesian non-linear mixed effect models with Stan and R. The model code can be found in the `non_linear.stan` file or at the bottom of this README.
 
 ## Three Parameter Model
 
-The traditional logistic curve is widely used for modeling data, and you
-may also recognize it as the same function used as the activation for
-the output layer of a neural net binary classifier. Logistic curves are
-commonly applied to model the growth trajectories of plants and animals.
-Here I give an example using longitudinal observations of individual
-Loblolly pine trees. All parameters are treated as random-effects.
+The traditional logistic curve is widely used for modeling data, and you may also recognize it as the same function used as the activation for the output layer of a neural net binary classifier. Logistic curves are commonly applied to model the growth trajectories of plants and animals. Here I give an example using longitudinal observations of individual Loblolly pine trees. All parameters are treated as random-effects.
 
 ![](three_param.gif)
 
-The data for this task come from the `datasets` package. Tree height
-measurements were collected from 14 different trees at 3, 5, 10, 15, 20,
-and 25 years of age.
+The data for this task come from the `datasets` package. Tree height measurements were collected from 14 different trees at 3, 5, 10, 15, 20, and 25 years of age.
 
-``` r
+```{r logi_3 data}
 data("Loblolly")
 d <- tibble(Loblolly)
 
 qplot(x=age, y=height, color=Seed, data=d)
 ```
 
-![](README_files/figure-gfm/logi_3%20data-1.png)<!-- -->
 
-``` r
+```{r logistic3_fit, warning=FALSE}
+
+
 stan_data <- list(
   N = nrow(d),
   I = length(unique(d$Seed)),
@@ -123,9 +76,10 @@ fit_3 <- stan(
     max_treedepth=10
   )
 )
+
 ```
 
-``` r
+```{r logistic3_plot, warning=FALSE}
 #Define function for convenience
 logistic3 <- function(t1, t2, t3, x){
   t1/(1+exp((t2-x)/t3))
@@ -171,13 +125,12 @@ ggplot() +
   scale_y_continuous("Height (ft)")
 ```
 
-![](README_files/figure-gfm/logistic3_plot-1.png)<!-- -->
-
 ## Five Parameter Model
 
 ![](five_param.gif)
 
-``` r
+```{r logistic5_fit, warning=FALSE}
+
 logistic5 <- function(t1, t2, t3, t4, t5, x, tau){
   y <- t1/(1+exp((t2-x)/t3)) - t1/(1+exp((t4-x)/t5))
   y <- y + rnorm(length(x), 0, tau)
@@ -202,11 +155,8 @@ y_data <- y_data  %>%
 names(y_data) <- c("y","id","x")
 y_data$y <- y_data$y - min(y_data$y)
 qplot(x=x, y=y, data=y_data, group=id)
-```
 
-![](README_files/figure-gfm/logistic5_fit-1.png)<!-- -->
 
-``` r
 stan_data <- list(
   N = nrow(y_data),
   I = max(y_data$id),
@@ -250,9 +200,11 @@ fit_5 <- stan(
     max_treedepth=10
   )
 )
+
 ```
 
-``` r
+
+```{r logistic5_plot}
 #Get posterior samples from fitted model
 post <- as.matrix(fit_5) %>% 
   data.frame()
@@ -327,22 +279,89 @@ ggplot() +
   scale_y_continuous("x")
 ```
 
-![](README_files/figure-gfm/logistic5_plot-1.png)<!-- -->
-
 ## Six Parameter Model
 
-This version is actually a modified version of the five parameter model,
-and was not included in Pinheiro and Bates (2000). Like the previous
-model, the function is simply two logistic curves added together, but
-with an extra parameter \(\theta_6\) that allows for a second asymptote
-on the right side of the function that can be greater than \(\theta_1\)
-(\(\theta_6\) \> 1) or less than \(\theta_1\) (\(\theta_6\) \< 1)
+This version is actually a modified version of the five parameter model, and was not included in Pinheiro and Bates (2000). Like the previous model, the function is simply two logistic curves added together, but with an extra parameter $\theta_6$ that allows for a second asymptote on the right side of the function that can be greater than $\theta_1$ ($\theta_6$ > 1) or less than $\theta_1$ ($\theta_6$ < 1)
 
 ![](six_param.gif)
 
-![](README_files/figure-gfm/logistic6_fit-1.png)<!-- -->
+```{r logistic6_fit, echo=FALSE, warning=FALSE}
 
-``` r
+logistic6 <- function(t1, t2, t3, t4, t5, t6, x, tau){
+  y <- t1/(1+exp((t2-x)/t3)) - (t6*t1)/(1+exp((t4-x)/t5))
+  y <- y + rnorm(length(x), 0, tau)
+  y
+}
+
+y_data = list()
+for(i in 1:20){
+  set.seed(i^6)
+  x = seq(0, 100, by = 2)
+  t1 = 55
+  t2 = 10
+  t3 = 2
+  t4 = 65
+  t5 = 4
+  t6 = 0.5
+  y_data[[i]] = logistic6(t1, t2, t3, t4, t5, t6, x, 2)
+}
+
+y_data <- y_data  %>% 
+  melt() %>%
+  mutate(x=rep(seq(0, 100, by = 2), times=20))
+names(y_data) <- c("y","id","x")
+y_data$y <- y_data$y - min(y_data$y)
+qplot(x=x, y=y, data=y_data, group=id)
+
+
+stan_data <- list(
+  N = nrow(y_data),
+  I = max(y_data$id),
+  id = y_data$id,
+  K = 6,
+  x = y_data$x,
+  y = y_data$y
+)
+
+#Function to pass initial values
+initList <- function(chain_id){
+  list(
+    "theta[1]" = rep(log(50), stan_data$I),
+    "theta[2]" = rep(log(1), stan_data$I),
+    "theta[3]" = rep(log(10), stan_data$I),
+    "theta[4]" = rep(log(50), stan_data$I),
+    "theta[5]" = rep(log(10), stan_data$I),
+    "theta[6]" = rep(log(0.5), stan_data$I)
+  )
+}
+
+pars = c("theta_i",
+         "theta_mean",
+         "sigma_theta",
+         "sigma",
+         "y_hat")
+
+fit_6 <- stan(
+  file = "stan/non_linear.stan",
+  data = stan_data,
+  iter = 6e2, 
+  warmup = 5e2,
+  thin = 1,
+  chains = 3,
+  seed = 2,
+  init = initList,
+  pars = pars,
+  control = list(
+    adapt_engaged = TRUE,
+    adapt_delta = 0.8,
+    stepsize = 0.01,
+    max_treedepth=10
+  )
+)
+
+```
+
+```{r logistic6_plot}
 #Get posterior samples from fitted model
 post <- as.matrix(fit_6) %>% data.frame()
 #get theta params
@@ -409,140 +428,140 @@ ggplot() +
   scale_y_continuous("x")
 ```
 
-![](README_files/figure-gfm/logistic6_plot-1.png)<!-- -->
-
 ## Stan Code
 
-    functions{
-      
-      real logistic3(real x, vector theta){
-        // 3 parameter logistic function
-        // theta[1] is the lower y-asymptote
-        // theta[2] is the inflection point (midpoint) of the curve (x-axis units)
-        // theta[3] controls the stepness of the curve
-        real y;
-        y = theta[1] / (1+exp((theta[2]-x)/theta[3]));
-        return y;
-      }
-      
-      real logistic5(real x, vector theta){
-        // 5 parameter logistic function
-        // theta[1] is the upper y-asymptote
-        // theta[2] is the x-coordinate of the first inflection point
-        // theta[3] is the first growth rate parameter
-        // theta[4] is the x-coordinate of the second inflection point
-        // theta[5] is the second growth rate parameter
-        real y;
-        y = theta[1] / (1+exp((theta[2]-x)/theta[3])) - 
-            theta[1] / (1+exp((theta[4]-x)/theta[5]));
-        return y;
-      }
-      
-      real logistic6(real x, vector theta){
-        // 6 parameter logistic function
-        // theta[1] is the upper y-asymptote
-        // theta[2] is the x-coordinate of the first inflection point
-        // theta[3] is the first growth rate parameter
-        // theta[4] is the x-coordinate of the second inflection point
-        // theta[5] is the second growth rate parameter
-        // theta[6] is related to the value of the second lower asymptote
-        real y;
-        y = theta[1] / (1+exp((theta[2]-x)/theta[3])) - 
-            (theta[1]*theta[6]) / (1+exp((theta[4]-x)/theta[5]));
-        return y;
-      }
-    
-      real logisticN(real x, vector theta){
-        int K = rows(theta);
-        real y;
-        if(K == 3){
-          y = logistic3(x, theta);
-        }
-        if(K == 5){
-          y = logistic5(x, theta);
-        }
-        if(K == 6){
-          y = logistic6(x, theta);
-        }
-        return y;
-      }
-      
-      vector nc_exp(vector mu, vector sigma, vector nu){
-        // "Non-centering"" decomposition for multilevel parameters
-        // mu_i = mu + sigma * nu
-        // nu ~ normal(0, 1)
-        // Same as: mu_i ~ normal(mu, sigma)
-        return exp(mu + sigma .* nu);
-      }
-      
-      vector nc_linear(vector mu, vector sigma, vector nu){
-        // "Non-centering"" decomposition for multilevel parameters
-        // mu_i = mu + sigma * nu
-        // nu ~ normal(0, 1)
-        // Same as: mu_i ~ normal(mu, sigma)
-        return mu + sigma .* nu;
-      }
-    
+```
+functions{
+  
+  real logistic3(real x, vector theta){
+    // 3 parameter logistic function
+    // theta[1] is the lower y-asymptote
+    // theta[2] is the inflection point (midpoint) of the curve (x-axis units)
+    // theta[3] controls the stepness of the curve
+    real y;
+    y = theta[1] / (1+exp((theta[2]-x)/theta[3]));
+    return y;
+  }
+  
+  real logistic5(real x, vector theta){
+    // 5 parameter logistic function
+    // theta[1] is the upper y-asymptote
+    // theta[2] is the x-coordinate of the first inflection point
+    // theta[3] is the first growth rate parameter
+    // theta[4] is the x-coordinate of the second inflection point
+    // theta[5] is the second growth rate parameter
+    real y;
+    y = theta[1] / (1+exp((theta[2]-x)/theta[3])) - 
+        theta[1] / (1+exp((theta[4]-x)/theta[5]));
+    return y;
+  }
+  
+  real logistic6(real x, vector theta){
+    // 6 parameter logistic function
+    // theta[1] is the upper y-asymptote
+    // theta[2] is the x-coordinate of the first inflection point
+    // theta[3] is the first growth rate parameter
+    // theta[4] is the x-coordinate of the second inflection point
+    // theta[5] is the second growth rate parameter
+    // theta[6] is related to the value of the second lower asymptote
+    real y;
+    y = theta[1] / (1+exp((theta[2]-x)/theta[3])) - 
+        (theta[1]*theta[6]) / (1+exp((theta[4]-x)/theta[5]));
+    return y;
+  }
+
+  real logisticN(real x, vector theta){
+    int K = rows(theta);
+    real y;
+    if(K == 3){
+      y = logistic3(x, theta);
     }
-    
-    data{
-      
-      int N; // total num obs
-      int K; // number parameters
-      int I; // number of clusters
-      int id[N]; //index of cluster id
-      vector[N] x;
-      vector[N] y;
-      
+    if(K == 5){
+      y = logistic5(x, theta);
     }
-    
-    parameters{
-      
-      real<lower=0> sigma; // error
-      vector[K] theta_mean; // pop. mean
-      vector<lower=0>[K] sigma_theta; // pop. var
-      vector[K] theta_norm[I]; // unit normals
-    
+    if(K == 6){
+      y = logistic6(x, theta);
     }
+    return y;
+  }
+  
+  vector nc_exp(vector mu, vector sigma, vector nu){
+    // "Non-centering"" decomposition for multilevel parameters
+    // mu_i = mu + sigma * nu
+    // nu ~ normal(0, 1)
+    // Same as: mu_i ~ normal(mu, sigma)
+    return exp(mu + sigma .* nu);
+  }
+  
+  vector nc_linear(vector mu, vector sigma, vector nu){
+    // "Non-centering"" decomposition for multilevel parameters
+    // mu_i = mu + sigma * nu
+    // nu ~ normal(0, 1)
+    // Same as: mu_i ~ normal(mu, sigma)
+    return mu + sigma .* nu;
+  }
+
+}
+
+data{
+  
+  int N; // total num obs
+  int K; // number parameters
+  int I; // number of clusters
+  int id[N]; //index of cluster id
+  vector[N] x;
+  vector[N] y;
+  
+}
+
+parameters{
+  
+  real<lower=0> sigma; // error
+  vector[K] theta_mean; // pop. mean
+  vector<lower=0>[K] sigma_theta; // pop. var
+  vector[K] theta_norm[I]; // unit normals
+
+}
+
+transformed parameters{
+  
+  vector<lower=0>[K] theta_i[I]; // random effect coefficients
+  
+  for(i in 1:I){
+    theta_i[i] = nc_exp(theta_mean, sigma_theta, theta_norm[i]);
+  }
+
+}
+
+model{
+  
+  // loop over observations
+  for(n in 1:N){
+    real mu = logisticN(x[n], theta_i[id[n]]);
+    target += normal_lpdf(y[n] | mu, sigma); // increment log prob
+  }
     
-    transformed parameters{
-      
-      vector<lower=0>[K] theta_i[I]; // random effect coefficients
-      
-      for(i in 1:I){
-        theta_i[i] = nc_exp(theta_mean, sigma_theta, theta_norm[i]);
-      }
-    
-    }
-    
-    model{
-      
-      // loop over observations
-      for(n in 1:N){
-        real mu = logisticN(x[n], theta_i[id[n]]);
-        target += normal_lpdf(y[n] | mu, sigma); // increment log prob
-      }
-        
-      // priors
-      theta_mean ~ normal(0, 1);
-      sigma ~ normal(0, 1);
-      sigma_theta ~ normal(0, 0.1);
-      for(i in 1:I){
-        theta_norm[i] ~ normal(0, 1);
-      }
-      
-    }
-    
-    generated quantities{
-    
-      vector[N] y_hat; // predicted values
-      vector[N] log_lik; // log-likelihood
-    
-      for(n in 1:N){
-        real mu;
-        mu = logisticN(x[n], theta_i[id[n]]);
-        y_hat[n] = normal_rng(mu, sigma);
-        log_lik[n] = normal_lpdf(y[n] | logisticN(x[n], theta_i[id[n]]), sigma);
-      }
-    
-    }
+  // priors
+  theta_mean ~ normal(0, 1);
+  sigma ~ normal(0, 1);
+  sigma_theta ~ normal(0, 0.1);
+  for(i in 1:I){
+    theta_norm[i] ~ normal(0, 1);
+  }
+  
+}
+
+generated quantities{
+
+  vector[N] y_hat; // predicted values
+  vector[N] log_lik; // log-likelihood
+
+  for(n in 1:N){
+    real mu;
+    mu = logisticN(x[n], theta_i[id[n]]);
+    y_hat[n] = normal_rng(mu, sigma);
+    log_lik[n] = normal_lpdf(y[n] | logisticN(x[n], theta_i[id[n]]), sigma);
+  }
+
+}
+```
