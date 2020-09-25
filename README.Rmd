@@ -3,6 +3,10 @@ title: "Bayesian Non-Linear Mixed-Effects Models in Stan"
 output: github_document
 ---
 
+## Introduction
+
+I thought I would share some old code I stumbled upon for fitting Bayesian non-linear mixed effect models with Stan and R. The model code can be found in the `non_linear.stan` file or at the bottom of this README.
+
 ```{r load_packages}
 library(rstan)
 library(ggplot2)
@@ -12,10 +16,6 @@ library(stringr)
 library(HDInterval)
 library(reshape)
 ```
-
-## Introduction
-
-I thought I would share some old code I stumbled upon for fitting Bayesian non-linear mixed effect models with Stan and R. The model code can be found in the `non_linear.stan` file or at the bottom of this README.
 
 ## Three Parameter Model
 
@@ -58,7 +58,7 @@ rstan_options(auto_write = TRUE) #saves compiled stan model to hard disk
 options(mc.cores = parallel::detectCores()) #uses multicore processing
 
 fit_3 <- stan(
-  file = "stan/non_linear.stan",
+  file = "non_linear.stan",
   data = stan_data,
   iter = 6e2, 
   warmup = 5e2,
@@ -182,7 +182,7 @@ pars = c("theta_i",
          "y_hat")
 
 fit_5 <- stan(
-  file = "stan/non_linear.stan",
+  file = "non_linear.stan",
   data = stan_data,
   iter = 6e2, 
   warmup = 5e2,
@@ -329,7 +329,7 @@ pars = c("theta_i",
          "y_hat")
 
 fit_6 <- stan(
-  file = "stan/non_linear.stan",
+  file = "non_linear.stan",
   data = stan_data,
   iter = 6e2, 
   warmup = 5e2,

@@ -1,6 +1,13 @@
 Bayesian Non-Linear Mixed-Effects Models in Stan
 ================
 
+## Introduction
+
+I thought I would share some old code I stumbled upon for fitting
+Bayesian non-linear mixed effect models with Stan and R. The model code
+can be found in the `non_linear.stan` file or at the bottom of this
+README.
+
 ``` r
 library(rstan)
 ```
@@ -51,13 +58,6 @@ library(reshape)
     ## 
     ##     expand, smiths
 
-## Introduction
-
-I thought I would share some old code I stumbled upon for fitting
-Bayesian non-linear mixed effect models with Stan and R. The model code
-can be found in the `non_linear.stan` file or at the bottom of this
-README.
-
 ## Three Parameter Model
 
 The traditional logistic curve is widely used for modeling data, and you
@@ -105,7 +105,7 @@ rstan_options(auto_write = TRUE) #saves compiled stan model to hard disk
 options(mc.cores = parallel::detectCores()) #uses multicore processing
 
 fit_3 <- stan(
-  file = "stan/non_linear.stan",
+  file = "non_linear.stan",
   data = stan_data,
   iter = 6e2, 
   warmup = 5e2,
@@ -232,7 +232,7 @@ pars = c("theta_i",
          "y_hat")
 
 fit_5 <- stan(
-  file = "stan/non_linear.stan",
+  file = "non_linear.stan",
   data = stan_data,
   iter = 6e2, 
   warmup = 5e2,
@@ -294,17 +294,6 @@ y_ci <-
 dy = cbind(xs,y_est, t(y_ci)) %>%
   data.frame()
 
-#Model predictions
-# pars <- grep("y_hat", attr(post, "names"))
-# y_hat <- post[,pars] %>% 
-#   colMeans %>%
-#   data.frame(y=.)
-# y_hat$id <- stan_data$id
-# y_hat$x <- stan_data$x
-# y_hat$type = "y_hat"
-# y_data$type <- "y_obs"
-# d2 <- rbind(y_data, y_hat)
-
 ggplot() +
   theme_light() +
   ggtitle("5-Parameter Logistic Model") +
@@ -329,7 +318,6 @@ ggplot() +
 
 ![](figures/five_param.gif)
 
-
 ## Six Parameter Model
 
 This version is actually a modified version of the five parameter model,
@@ -339,9 +327,7 @@ with an extra parameter \(\theta_6\) that allows for a second asymptote
 on the right side of the function that can be greater than \(\theta_1\)
 (\(\theta_6\) \> 1) or less than \(\theta_1\) (\(\theta_6\) \< 1)
 
-![](README_files/figure-gfm/logistic6_fit-1.png)
-
-![](figures/six_param.gif)
+![](README_files/figure-gfm/logistic6_fit-1.png)<!-- -->
 
 ``` r
 #Get posterior samples from fitted model
@@ -411,6 +397,7 @@ ggplot() +
 ```
 
 ![](README_files/figure-gfm/logistic6_plot-1.png)<!-- -->
+![](figures/six_param.gif)
 
 ## Stan Code
 
