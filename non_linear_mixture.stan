@@ -97,51 +97,52 @@ data{
 
 parameters{
   
-  real<lower=0> sigma; // error
+  real psi; // component mixture probability
+  real<lower=0> sigma[2]; // component error
+  vector[K-1] lambda_mean; // pop. mean
+  vector<lower=0>[K-1] sigma_lambda; // pop. var
+  vector[K-1] lambda_norm[I]; // unit normals
   vector[K] theta_mean; // pop. mean
   vector<lower=0>[K] sigma_theta; // pop. var
   vector[K] theta_norm[I]; // unit normals
-
+  
 }
 
 transformed parameters{
-  
+
+  vector<lower=0>[K-1] lambda_i[I]; // random effect coefficients  
   vector<lower=0>[K] theta_i[I]; // random effect coefficients
+  real Psi = inv_logit(psi);
   
   for(i in 1:I){
+    lambda_i[i] = nc_exp(lambda_mean, sigma_lambda, lambda_norm[i]);
     theta_i[i] = nc_exp(theta_mean, sigma_theta, theta_norm[i]);
   }
-
+  
 }
 
 model{
   
   // loop over observations
   for(n in 1:N){
-    real mu = logisticN(x[n], theta_i[id[n]]);
-    target += normal_lpdf(y[n] | mu, sigma); // increment log prob
+    real mu1 = logisticN(x[n], lambda_i[id[n]]);
+    real log_lik1 = normal_lpdf(y[n] | mu1, sigma[1]);
+    real mu2 = logisticN(x[n], theta_i[id[n]]);
+    real log_lik2 = normal_lpdf(y[n] | mu2, sigma[2]);
+    target += log_mix(Psi, log_lik1, log_lik2);
+
   }
-    
+  
   // priors
+  psi ~ normal(0, 1);
+  lambda_mean ~ normal(0, 1);
   theta_mean ~ normal(0, 1);
   sigma ~ normal(0, 1);
+  sigma_lambda ~ normal(0, 1);
   sigma_theta ~ normal(0, 1);
   for(i in 1:I){
+    lambda_norm[i] ~ normal(0, 1);
     theta_norm[i] ~ normal(0, 1);
   }
   
-}
-
-generated quantities{
-
-  vector[N] y_hat; // predicted values
-  vector[N] log_lik; // log-likelihood
-
-  for(n in 1:N){
-    real mu;
-    mu = logisticN(x[n], theta_i[id[n]]);
-    y_hat[n] = normal_rng(mu, sigma);
-    log_lik[n] = normal_lpdf(y[n] | logisticN(x[n], theta_i[id[n]]), sigma);
-  }
-
 }
