@@ -89,7 +89,7 @@ data{
   int N; // total num obs
   int K; // number parameters
   int I; // number of clusters
-  int id[N]; //index of cluster id
+  int id[N]; // index of cluster id
   vector[N] x;
   vector[N] y;
   
@@ -130,7 +130,6 @@ model{
     real mu2 = logisticN(x[n], theta_i[id[n]]);
     real log_lik2 = normal_lpdf(y[n] | mu2, sigma[2]);
     target += log_mix(Psi, log_lik1, log_lik2);
-
   }
   
   // priors

@@ -19,7 +19,7 @@ Each of the models presented here are variations of the logistic (sigmoid) curve
 * Five Parameters: Two logistic curves added together, with differing rates and inflection points but a shared upper *y* limit
 * Six Parameters: Two logistic curves added together, with differing rates, inflection points, and *y* values of their lower asymptote(s)
 
-The parameters of the logistic curves ("thetas") are modeled as random-effects:
+The parameters of the logistic curves ("thetas") are modeled as random-effects.
 
 ![](figures/mm.gif)
 
@@ -69,7 +69,8 @@ Here I give an example using longitudinal observations of individual Loblolly pi
 data("Loblolly")
 d <- tibble(Loblolly)
 
-qplot(x=age, y=height, color=Seed, data=d)
+qplot(x=age, y=height, color=Seed, data=d) +
+  ggtitle("Longitudinal Measurements of Loblolly Pine Trees")
 ```
 
 As you can see, we have repeated measurements of the same individuals ("Seed") over time. These data are just begging to be fit to a NLME model, with individuals as the random effect. To fit these observations to our Stan model, we need to do put the data into a list for Stan and give the sampler some good starting values to help get things going.
@@ -183,7 +184,7 @@ ggplot() +
 
 ![](figures/three_param.gif)
 
-The average logistic growth curve (blue) does an 'ok' job of fitting to the pine tree growth data, although it tends to overestimate the predicted height of trees at early stages of development and under-predict heights at intermediate stages (e.g, around 10 years of age). As mentioned before, interpreting the model parameters in light of the original data is a cinch, requiring no transformations back to an original scale. For example, the population of mean of $\bar{\theta}_1$ (green) corresponds to the predicted upper limit of the height of Lolbolly pine trees, which is estimated here to be 61.4 feet (95% highest posterior density interval: 59.0-65.4). Growth is most rapid near the midpoint of the curve, and the coordinate position of this point on the x-axis is given from the parameter $\bar{\theta}_2$ (purple). This model predicts that the midpoint of tree growth occurs at roughly 11.8 years (95% HPDI: 11.3-12.3) of age.
+The average logistic growth curve (blue) does an 'ok' job of fitting to the pine tree growth data, although it tends to overestimate the predicted height of trees at early stages of development and under-predict heights at intermediate stages (e.g, around 10 years of age). As mentioned before, interpreting the model parameters in light of the original data is a cinch, requiring no transformations back to an original scale. For example, the population mean of $\bar{\theta}_1$ (green) corresponds to the predicted upper limit of the height of Loblolly pine trees, which is estimated here to be 61.4 feet (95% highest posterior density interval: 59.0-65.4). Growth is most rapid near the midpoint of the curve, and the coordinate position of this point on the x-axis is given from the parameter $\bar{\theta}_2$ (purple). This model predicts that the midpoint of tree growth occurs at roughly 11.8 years (95% HPDI: 11.3-12.3) of age.
 
 ## Five Parameter Model
 
@@ -195,7 +196,7 @@ The five parameter logistic model is actually the difference of two logistic cur
 logistic5 <- function(t1, t2, t3, t4, t5, x, tau){
   y <- t1/(1+exp((t2-x)/t3)) - t1/(1+exp((t4-x)/t5))
   y <- y + rnorm(length(x), 0, tau)
-  y
+  return(y)
 }
 
 #Generate data from this function
@@ -209,15 +210,15 @@ for(i in 1:n_curves){
   t3 = 2
   t4 = 75
   t5 = 2.5
-  y_data[[i]] = logistic5(t1, t2, t3, t4, t5, x, tau = 2)
+  y_data[[i]] = logistic5(t1, t2, t3, t4, t5, x, tau = 5)
 }
 
 y_data <- y_data  %>% 
   melt() %>%
   mutate(x=rep(seq(0, 100, by = 2), times=20))
 names(y_data) <- c("y","id","x")
-y_data$y <- y_data$y - min(y_data$y)
-qplot(x=x, y=y, data=y_data, group=id)
+qplot(x=x, y=y, data=y_data, group=id) +
+  ggtitle("Simulated Data [noise parameter = 5]")
 ```
 
 [Papworth et al. (2012)](https://besjournals.onlinelibrary.wiley.com/doi/10.1111/j.2041-210X.2012.00189.x) used such a model to examine the movement behavior of human central-place foragers, with the net displacement of individuals from the location of their home over the course of a given day serving as the dependent variable for the analysis. From their fitted model parameters, the authors of the study were then able to determine how the choice of foraging routes influenced the timing, maximum displacement, and degree of individual variation in observed movement behavior.
@@ -334,11 +335,10 @@ ggplot() +
 This version is actually a modified version of the five parameter model, and was not included in Pinheiro and Bates (2000). Like the previous model, the function is simply two logistic curves added together, but with an extra parameter $\theta_6 > 0$ that adjusts the location of the lower asymptote on the right curve relative to the position of the lower asymptote of the left curve. As before, I will generate some example data, with added random noise, and fit the model.
 
 ```{r logi_6_data, fig.align="center"}
-
 logistic6 <- function(t1, t2, t3, t4, t5, t6, x, tau){
   y <- t1/(1+exp((t2-x)/t3)) - (t6*t1)/(1+exp((t4-x)/t5))
   y <- y + rnorm(length(x), 0, tau)
-  y
+  return(y)
 }
 
 y_data = list()
@@ -352,15 +352,15 @@ for(i in 1:n_curves){
   t4 = 65
   t5 = 4
   t6 = 0.5
-  y_data[[i]] = logistic6(t1, t2, t3, t4, t5, t6, x, 2)
+  y_data[[i]] = logistic6(t1, t2, t3, t4, t5, t6, x, 5)
 }
 
 y_data <- y_data  %>% 
   melt() %>%
   mutate(x=rep(seq(0, 100, by = 2), times=20))
 names(y_data) <- c("y","id","x")
-y_data$y <- y_data$y - min(y_data$y)
-qplot(x=x, y=y, data=y_data, group=id)
+qplot(x=x, y=y, data=y_data, group=id) +
+  ggtitle("Simulated Data [noise parameter = 5]")
 ```
 
 ```{r logistic6_fit, echo=FALSE, warning=FALSE}
@@ -407,7 +407,6 @@ post <- as.matrix(fit_6) %>% data.frame()
 pars <- sprintf("theta_mean.%s.", 1:6)
 thetas <- exp(post[,pars])
   
-
 ## Get predictions from input values
 xs <- seq(0, 100, 2)
 
@@ -466,6 +465,7 @@ ggplot() +
   scale_x_continuous("x") +
   scale_y_continuous("y")
 ```
+
 ![](figures/six_param.gif)
 
 ## Five or Six Parameters?
@@ -475,13 +475,13 @@ In some cases, it may be difficult to tell at a glance whether a five or six par
 One approach is to fit the same data to both models, and then assess their relative fit using an information criterion. In the calculation of many information criteria, there is a penalty for adding more parameters to a model that can lead to overfitting of the data. Information criteria like WAIC can often be calculated from the posterior log-likelihood of the fitted models. In the Stan model, the value of the log-likelihood is sampled from the `generated quantities` block. We can then define an R function to calculate the model WAIC directly from the `stanfit` object.
 
 ```{r waic}
-#Returns lppd, p_waic_1, p_waic_2, and waic
 colVars <- function (a){
   diff <- a - matrix (colMeans(a), nrow(a), ncol(a), byrow=TRUE)
   vars <- colMeans (diff^2)*nrow(a)/(nrow(a)-1)
   return (vars)
 }
 
+#Returns lppd, p_waic_1, p_waic_2, and waic
 waic <- function (stanfit){
   log_lik <- rstan::extract (stanfit, "log_lik")$log_lik
   lppd <- sum (log (colMeans(exp(log_lik))))
@@ -516,8 +516,8 @@ y_data <- y_data  %>%
   melt() %>%
   mutate(x=rep(seq(0, 100, by = 2), times=20))
 names(y_data) <- c("y","id","x")
-y_data$y <- y_data$y - min(y_data$y)
-qplot(x=x, y=y, data=y_data, group=id)
+qplot(x=x, y=y, data=y_data, group=id) + 
+  ggtitle("Generated Data")
 ```
 
 Now, these data are fitted to both the five and six parameter models. Note, all that is needed is to change the value of `stan_data$K` from 5 to 6.
@@ -560,7 +560,7 @@ six <- stan(
 )
 ```
 
-```{r waic_plot}
+```{r waic_plot, include=FALSE, eval=TRUE}
 
 post5 <- as.matrix(five) %>% 
   data.frame()
@@ -637,13 +637,15 @@ dy = cbind(xs,
   data.frame()
 dy$model <- rep(c("Five","Six"), each = nrow(dy)/2)
 names(dy) <- c("x","y","lower","upper","model")
+```
 
+```{r plot}
 ggplot() +
   theme_light() +
   ggtitle("5- and 6-Parameter Logistic Models") +
+  geom_point(data=y_data, aes(x=x, y=y), color="gray10", shape=1, size=1) +
   geom_line(data=dy, aes(x=x, y=y, color=model)) +
   geom_ribbon(data=dy, aes(x=x, ymin=lower, ymax=upper, color=model), fill=alpha("white",0), linetype=2, size=0.5, show.legend = FALSE) +
-  geom_point(data=y_data, aes(x=x, y=y), color="gray10", shape=1, size=1) +
   scale_color_viridis_d(begin = 0.2, end=0.8) +
   scale_x_continuous("x") +
   scale_y_continuous("y")
@@ -658,7 +660,52 @@ sapply(list(five, six), waic) %>%
 
 ```
 
-From this table, we see that the six parameter model provides a better relative fit to the data (**WAIC = 4751**) than the five parameter alternative (**WAIC = 5762**), despite the greater complexity.
+From this table, we see that the six parameter model provides a better relative fit to the data (**WAIC = 4281**) than the five parameter alternative (**WAIC = 5063**), despite the greater complexity.
+
+<!-- ## Mixture Model with NLME Components -->
+
+<!-- Imagine observations produced by two separate generating processes, each occurring in a constant but unknown proportion ($\psi$) to one another. Furthermore, let us assume that each process produces data that can be readily modeled by a five parameter logistic model described here, and differ only in the values of their parameters $\theta$: -->
+
+<!-- ```{r, logi_mix_data} -->
+
+<!-- xs <- seq(0, 100, by=0.5) -->
+<!-- y_1 <- sapply(1:10, function(x) logistic5(25, t2 = 3, t3 = 3, t4 = 85, t5 = 2.5, x = xs, tau=3)) %>% as.vector() -->
+<!-- y_2 <- sapply(1:10, function(x) logistic6(30, t2 = 2, t3 = 3, t4 = 75, t5 = 1.5, t6=0.4, x = xs, tau=3))  %>%  -->
+<!--   as.vector() -->
+
+<!-- dy <- data.frame(x=xs, y=c(y_1, y_2)) -->
+<!-- dy$component <- rep(c("1","2"), each=nrow(dy)/2) -->
+<!-- dy$id <- rep(1:20, each=length(xs)) -->
+
+<!-- qplot(x=x, y=y, color=factor(component), data=dy, show.legend=FALSE)  + ggtitle("Generated Data (labeled)") -->
+<!-- qplot(x=x, y=y, data=dy) + ggtitle("Generated Data (unlabeled)") -->
+
+<!-- ``` -->
+
+<!-- ```{r logi_mix_fit} -->
+<!-- stan_data <- list( -->
+<!--   N = nrow(dy), -->
+<!--   I = max(dy$id), -->
+<!--   id = dy$id, -->
+<!--   K = 6, -->
+<!--   x = dy$x, -->
+<!--   y = dy$y -->
+<!-- ) -->
+
+<!-- fit_mix <- stan( -->
+<!--   file = "non_linear_mixture.stan", -->
+<!--   data = stan_data, -->
+<!--   iter = 6e2,  -->
+<!--   warmup = 5e2, -->
+<!--   thin = 1, -->
+<!--   chains = 3, -->
+<!--   seed = 2, -->
+<!--   # init = initList, -->
+<!--   pars = c("psi","theta_i","lambda_i","sigma"), -->
+<!--   control = control. -->
+<!-- ) -->
+<!-- ``` -->
+
 
 ## Stan Code
 The raw Stan code for fitting the 3-, 5-, and 6-parameter logistic growth curves.

@@ -54,7 +54,7 @@ Each of the models presented here are variations of the logistic
     rates, inflection points, and *y* values of their lower asymptote(s)
 
 The parameters of the logistic curves (“thetas”) are modeled as
-random-effects:
+random-effects.
 
 ![](figures/mm.gif)
 
@@ -166,7 +166,8 @@ trees at 3, 5, 10, 15, 20, and 25 years of age.
 data("Loblolly")
 d <- tibble(Loblolly)
 
-qplot(x=age, y=height, color=Seed, data=d)
+qplot(x=age, y=height, color=Seed, data=d) +
+  ggtitle("Longitudinal Measurements of Loblolly Pine Trees")
 ```
 
 ![](README_files/figure-gfm/logi_3%20data-1.png)<!-- -->
@@ -270,12 +271,12 @@ predicted height of trees at early stages of development and
 under-predict heights at intermediate stages (e.g, around 10 years of
 age). As mentioned before, interpreting the model parameters in light of
 the original data is a cinch, requiring no transformations back to an
-original scale. For example, the population of mean of
-\(\bar{\theta}_1\) (green) corresponds to the predicted upper limit of
-the height of Lolbolly pine trees, which is estimated here to be 61.4
-feet (95% highest posterior density interval: 59.0-65.4). Growth is most
-rapid near the midpoint of the curve, and the coordinate position of
-this point on the x-axis is given from the parameter \(\bar{\theta}_2\)
+original scale. For example, the population mean of \(\bar{\theta}_1\)
+(green) corresponds to the predicted upper limit of the height of
+Loblolly pine trees, which is estimated here to be 61.4 feet (95%
+highest posterior density interval: 59.0-65.4). Growth is most rapid
+near the midpoint of the curve, and the coordinate position of this
+point on the x-axis is given from the parameter \(\bar{\theta}_2\)
 (purple). This model predicts that the midpoint of tree growth occurs at
 roughly 11.8 years (95% HPDI: 11.3-12.3) of age.
 
@@ -292,7 +293,7 @@ might appear like.
 logistic5 <- function(t1, t2, t3, t4, t5, x, tau){
   y <- t1/(1+exp((t2-x)/t3)) - t1/(1+exp((t4-x)/t5))
   y <- y + rnorm(length(x), 0, tau)
-  y
+  return(y)
 }
 
 #Generate data from this function
@@ -306,15 +307,15 @@ for(i in 1:n_curves){
   t3 = 2
   t4 = 75
   t5 = 2.5
-  y_data[[i]] = logistic5(t1, t2, t3, t4, t5, x, tau = 2)
+  y_data[[i]] = logistic5(t1, t2, t3, t4, t5, x, tau = 5)
 }
 
 y_data <- y_data  %>% 
   melt() %>%
   mutate(x=rep(seq(0, 100, by = 2), times=20))
 names(y_data) <- c("y","id","x")
-y_data$y <- y_data$y - min(y_data$y)
-qplot(x=x, y=y, data=y_data, group=id)
+qplot(x=x, y=y, data=y_data, group=id) +
+  ggtitle("Simulated Data [noise parameter = 5]")
 ```
 
 <img src="README_files/figure-gfm/logistic5_example-1.png" style="display: block; margin: auto;" />
@@ -455,7 +456,7 @@ example data, with added random noise, and fit the model.
 logistic6 <- function(t1, t2, t3, t4, t5, t6, x, tau){
   y <- t1/(1+exp((t2-x)/t3)) - (t6*t1)/(1+exp((t4-x)/t5))
   y <- y + rnorm(length(x), 0, tau)
-  y
+  return(y)
 }
 
 y_data = list()
@@ -469,15 +470,15 @@ for(i in 1:n_curves){
   t4 = 65
   t5 = 4
   t6 = 0.5
-  y_data[[i]] = logistic6(t1, t2, t3, t4, t5, t6, x, 2)
+  y_data[[i]] = logistic6(t1, t2, t3, t4, t5, t6, x, 5)
 }
 
 y_data <- y_data  %>% 
   melt() %>%
   mutate(x=rep(seq(0, 100, by = 2), times=20))
 names(y_data) <- c("y","id","x")
-y_data$y <- y_data$y - min(y_data$y)
-qplot(x=x, y=y, data=y_data, group=id)
+qplot(x=x, y=y, data=y_data, group=id) +
+  ggtitle("Simulated Data [noise parameter = 5]")
 ```
 
 <img src="README_files/figure-gfm/logi_6_data-1.png" style="display: block; margin: auto;" />
@@ -489,7 +490,6 @@ post <- as.matrix(fit_6) %>% data.frame()
 pars <- sprintf("theta_mean.%s.", 1:6)
 thetas <- exp(post[,pars])
   
-
 ## Get predictions from input values
 xs <- seq(0, 100, 2)
 
@@ -550,6 +550,7 @@ ggplot() +
 ```
 
 <img src="README_files/figure-gfm/logistic6_plot-1.png" style="display: block; margin: auto;" />
+
 ![](figures/six_param.gif)
 
 ## Five or Six Parameters?
@@ -573,13 +574,13 @@ then define an R function to calculate the model WAIC directly from the
 `stanfit` object.
 
 ``` r
-#Returns lppd, p_waic_1, p_waic_2, and waic
 colVars <- function (a){
   diff <- a - matrix (colMeans(a), nrow(a), ncol(a), byrow=TRUE)
   vars <- colMeans (diff^2)*nrow(a)/(nrow(a)-1)
   return (vars)
 }
 
+#Returns lppd, p_waic_1, p_waic_2, and waic
 waic <- function (stanfit){
   log_lik <- rstan::extract (stanfit, "log_lik")$log_lik
   lppd <- sum (log (colMeans(exp(log_lik))))
@@ -616,8 +617,8 @@ y_data <- y_data  %>%
   melt() %>%
   mutate(x=rep(seq(0, 100, by = 2), times=20))
 names(y_data) <- c("y","id","x")
-y_data$y <- y_data$y - min(y_data$y)
-qplot(x=x, y=y, data=y_data, group=id)
+qplot(x=x, y=y, data=y_data, group=id) + 
+  ggtitle("Generated Data")
 ```
 
 ![](README_files/figure-gfm/waic_data-1.png)<!-- -->
@@ -665,94 +666,18 @@ six <- stan(
 ```
 
 ``` r
-post5 <- as.matrix(five) %>% 
-  data.frame()
-post6 <- as.matrix(six) %>% 
-  data.frame()
-
-#get theta params
-thetas5 <- exp(post5[, sprintf("theta_mean.%s.", 1:5)])
-thetas6 <- exp(post6[, sprintf("theta_mean.%s.", 1:6)])
-
-## Get predictions from input values
-xs <- seq(0, 100, 2)
-
-#Estimated mean growth curve
-y_est5 <-
-  sapply(xs, function(x)
-    logistic5(
-      t1 = thetas5[, 1],
-      t2 = thetas5[, 2],
-      t3 = thetas5[, 3],
-      t4 = thetas5[, 4],
-      t5 = thetas5[, 5],
-      x = x,
-      0
-    )) %>%
-  colMeans
-
-y_est6 <-
-  sapply(xs, function(x)
-    logistic6(
-      t1 = thetas6[, 1],
-      t2 = thetas6[, 2],
-      t3 = thetas6[, 3],
-      t4 = thetas6[, 4],
-      t5 = thetas6[, 5],
-      t6 = thetas6[, 6],
-      x = x,
-      0
-    )) %>%
-  colMeans
-
-#Credible intervals for mean growth curve
-y_ci5 <-
-  sapply(xs, function(x)
-    logistic5(
-      t1 = thetas5[, 1],
-      t2 = thetas5[, 2],
-      t3 = thetas5[, 3],
-      t4 = thetas5[, 4],
-      t5 = thetas5[, 5],
-      x = x,
-      0
-    )) %>%
-  hdi(0.95)
-
-y_ci6 <-
-  sapply(xs, function(x)
-    logistic6(
-      t1 = thetas6[, 1],
-      t2 = thetas6[, 2],
-      t3 = thetas6[, 3],
-      t4 = thetas6[, 4],
-      t5 = thetas6[, 5],
-      t6 = thetas6[, 6],
-      x = x,
-      0
-    )) %>%
-  hdi(0.95)
-
-dy = cbind(xs,
-           c(y_est5, y_est6), 
-           t(cbind(y_ci5, y_ci6))
-           ) %>%
-  data.frame()
-dy$model <- rep(c("Five","Six"), each = nrow(dy)/2)
-names(dy) <- c("x","y","lower","upper","model")
-
 ggplot() +
   theme_light() +
   ggtitle("5- and 6-Parameter Logistic Models") +
+  geom_point(data=y_data, aes(x=x, y=y), color="gray10", shape=1, size=1) +
   geom_line(data=dy, aes(x=x, y=y, color=model)) +
   geom_ribbon(data=dy, aes(x=x, ymin=lower, ymax=upper, color=model), fill=alpha("white",0), linetype=2, size=0.5, show.legend = FALSE) +
-  geom_point(data=y_data, aes(x=x, y=y), color="gray10", shape=1, size=1) +
   scale_color_viridis_d(begin = 0.2, end=0.8) +
   scale_x_continuous("x") +
   scale_y_continuous("y")
 ```
 
-![](README_files/figure-gfm/waic_plot-1.png)<!-- -->
+![](README_files/figure-gfm/plot-1.png)<!-- -->
 
 The model with six parameters (for added flexibility) appears to fit the
 data better, as intended. But intuition is no match for the types of
@@ -768,12 +693,83 @@ sapply(list(five, six), waic) %>%
 ```
 
     ##      waic     p_waic   lppd      p_waic_1
-    ## [1,] 5762.302 9.726458 -2871.424 9.5232  
-    ## [2,] 4750.966 13.1937  -2362.29  12.7964
+    ## [1,] 5063.177 10.01275 -2521.576 9.755179
+    ## [2,] 4280.798 19.4968  -2120.902 18.89421
 
 From this table, we see that the six parameter model provides a better
-relative fit to the data (**WAIC = 4751**) than the five parameter
-alternative (**WAIC = 5762**), despite the greater complexity.
+relative fit to the data (**WAIC = 4281**) than the five parameter
+alternative (**WAIC = 5063**), despite the greater
+complexity.
+
+<!-- ## Mixture Model with NLME Components -->
+
+<!-- Imagine observations produced by two separate generating processes, each occurring in a constant but unknown proportion ($\psi$) to one another. Furthermore, let us assume that each process produces data that can be readily modeled by a five parameter logistic model described here, and differ only in the values of their parameters $\theta$: -->
+
+<!-- ```{r, logi_mix_data} -->
+
+<!-- xs <- seq(0, 100, by=0.5) -->
+
+<!-- y_1 <- sapply(1:10, function(x) logistic5(25, t2 = 3, t3 = 3, t4 = 85, t5 = 2.5, x = xs, tau=3)) %>% as.vector() -->
+
+<!-- y_2 <- sapply(1:10, function(x) logistic6(30, t2 = 2, t3 = 3, t4 = 75, t5 = 1.5, t6=0.4, x = xs, tau=3))  %>%  -->
+
+<!--   as.vector() -->
+
+<!-- dy <- data.frame(x=xs, y=c(y_1, y_2)) -->
+
+<!-- dy$component <- rep(c("1","2"), each=nrow(dy)/2) -->
+
+<!-- dy$id <- rep(1:20, each=length(xs)) -->
+
+<!-- qplot(x=x, y=y, color=factor(component), data=dy, show.legend=FALSE)  + ggtitle("Generated Data (labeled)") -->
+
+<!-- qplot(x=x, y=y, data=dy) + ggtitle("Generated Data (unlabeled)") -->
+
+<!-- ``` -->
+
+<!-- ```{r logi_mix_fit} -->
+
+<!-- stan_data <- list( -->
+
+<!--   N = nrow(dy), -->
+
+<!--   I = max(dy$id), -->
+
+<!--   id = dy$id, -->
+
+<!--   K = 6, -->
+
+<!--   x = dy$x, -->
+
+<!--   y = dy$y -->
+
+<!-- ) -->
+
+<!-- fit_mix <- stan( -->
+
+<!--   file = "non_linear_mixture.stan", -->
+
+<!--   data = stan_data, -->
+
+<!--   iter = 6e2,  -->
+
+<!--   warmup = 5e2, -->
+
+<!--   thin = 1, -->
+
+<!--   chains = 3, -->
+
+<!--   seed = 2, -->
+
+<!--   # init = initList, -->
+
+<!--   pars = c("psi","theta_i","lambda_i","sigma"), -->
+
+<!--   control = control. -->
+
+<!-- ) -->
+
+<!-- ``` -->
 
 ## Stan Code
 
