@@ -63,7 +63,8 @@ functions{
   }
   
   vector nc_exp(vector mu, vector sigma, vector nu){
-    /* "Non-centering"" decomposition for multilevel parameters
+    /* 
+    "Non-centering"" decomposition for multilevel parameters
     mu_i = mu + sigma * nu
     nu ~ normal(0, 1)
     Same as: mu_i ~ normal(mu, sigma)
@@ -73,7 +74,8 @@ functions{
   }
   
   vector nc_linear(vector mu, vector sigma, vector nu){
-    /* "Non-centering"" decomposition for multilevel parameters
+    /* 
+    "Non-centering"" decomposition for multilevel parameters
     mu_i = mu + sigma * nu
     nu ~ normal(0, 1)
     Same as: mu_i ~ normal(mu, sigma)
@@ -97,7 +99,7 @@ data{
 
 parameters{
   
-  real psi; // component mixture probability
+  real Psi; // component mixture probability
   real<lower=0> sigma[2]; // component error
   vector[K-1] lambda_mean; // pop. mean
   vector<lower=0>[K-1] sigma_lambda; // pop. var
@@ -112,8 +114,7 @@ transformed parameters{
 
   vector<lower=0>[K-1] lambda_i[I]; // random effect coefficients  
   vector<lower=0>[K] theta_i[I]; // random effect coefficients
-  real Psi = inv_logit(psi);
-  
+
   for(i in 1:I){
     lambda_i[i] = nc_exp(lambda_mean, sigma_lambda, lambda_norm[i]);
     theta_i[i] = nc_exp(theta_mean, sigma_theta, theta_norm[i]);
@@ -123,17 +124,19 @@ transformed parameters{
 
 model{
   
+  real Psi_logit = inv_logit(Psi);
+  
   // loop over observations
   for(n in 1:N){
     real mu1 = logisticN(x[n], lambda_i[id[n]]);
     real log_lik1 = normal_lpdf(y[n] | mu1, sigma[1]);
     real mu2 = logisticN(x[n], theta_i[id[n]]);
     real log_lik2 = normal_lpdf(y[n] | mu2, sigma[2]);
-    target += log_mix(Psi, log_lik1, log_lik2);
+    target += log_mix(Psi_logit, log_lik1, log_lik2);
   }
   
   // priors
-  psi ~ normal(0, 1);
+  Psi ~ normal(-0.6, 1);
   lambda_mean ~ normal(0, 1);
   theta_mean ~ normal(0, 1);
   sigma ~ normal(0, 1);
@@ -142,6 +145,26 @@ model{
   for(i in 1:I){
     lambda_norm[i] ~ normal(0, 1);
     theta_norm[i] ~ normal(0, 1);
+  }
+  
+}
+
+generated quantities{
+  
+  vector[N] psi; // component membership probability by observation
+  real Psi_logit = inv_logit(Psi);
+  
+  for(n in 1:N){
+    real mu1 = logisticN(x[n], lambda_i[id[n]]);
+    real mu2 = logisticN(x[n], theta_i[id[n]]);
+    real Pr_B_given_A = exp(normal_lpdf(y[n] | mu1, sigma[1]));
+    real Pr_B = exp(
+                  log_mix(Psi_logit, 
+                          normal_lpdf(y[n] | mu1, sigma[1]),
+                          normal_lpdf(y[n] | mu2, sigma[2])
+                      )
+                  );
+    psi[n] = (Psi_logit * Pr_B_given_A) / Pr_B;
   }
   
 }

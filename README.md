@@ -13,35 +13,43 @@ which remains an excellent resource for anyone wanting a deep-dive into
 the background of nonlinear models and methods for their estimation.
 
 Nonlinear models are wonderful tools for parametric modeling of diverse
-phenomena, with applications spanning numerous academic disciplines.
-From my experience, I find that these models are particularly
-well-suited for time series data due to their flexibility, which can
-capture chages in characteristic rates over segments of a curve, and the
-ease with which model parameters can be interpreted. For example, in
-many cases, model parameters will correspond to important locations
-along the support axis where the inflection points or other key features
-of a curve are estimated to occur. Pinheiro and Bates (2000) also show
-that these models can be easily extended to incorporate hierachical data
-structures. For these reasons, I generally prefer nonlinear mixed-effect
-models over non-parametric methods for fitting nonlinear curves, such as
-splines or generalized additive models.
+phenomena, with applications spanning numerous academic disciplines. I
+have found that these models are particularly well-suited for time
+series data due to their flexibility, which can capture chages in
+characteristic rates over segments of a curve, and the ease with which
+model parameters can be interpreted. For example, in many cases, model
+parameters will correspond to important locations along the support axis
+where the midpoint or other key features of a logistic curve occur.
+Pinheiro and Bates (2000) also show that these models can be easily
+extended to incorporate hierachical data structures. For these reasons,
+I generally prefer nonlinear mixed-effect models over non-parametric
+methods for fitting nonlinear curves, such as splines or generalized
+additive models.
 
 In the past, a major drawback of NLMEs was that they could be difficult
-to fit using maximum likelihood and related methods, due to the
-multimodal nature of the posterior distribution. Often times, fitting
-these models also required informative starting values or specialized
-functions to automatically search a grid of potential starting values in
-order to initialize the optimization algorithm from a favorable region
-of the parameter space.
+to fit using maximum likelihood and related optimization methods. This
+is due to the multimodal nature of the posterior distribution of
+nonlinear models specifically and multilevel models more generally.
+Often times, fitting these models also required providing the
+optimization algorithm with informative starting values or by using
+specialized functions to search a grid of potential starting values to
+locate a favorable region of the parameter space (see `nlme::SSlogis`).
 
 Advances in Bayesian estimation since Pinheiro and Bates’ (2000) book
 have largely circumvented these issues. The latest MCMC sampling
 algorithms (e.g., No-U-Turn and Hamiltonian Monte Carlo) are capable of
-efficiently exploring the parameter space of even poorly behaved model
-posteriors, and can provide reliable estimates of random-effect
-parameters. Relatedly, Bayesian estimation of NLME models is also less
-sensitive to poor choices of starting values, as the sampler can be
-expected to quickly move away from regions of lower posterior density.
+efficiently exploring the parameter space of even poorly behaved (i.e.,
+multimodal and non-Gaussian) model posteriors, and can therefore provide
+reliable estimates of mulitlevel parameters. Relatedly, Bayesian
+estimation of NLME models may also be less sensitive to poor choices of
+starting values. Using Stan, potential starting values for the algorithm
+are sampled from a parameter’s prior distribution (if none are provided
+by the user), and repeated attempts will be made if a set of values
+happens to be in region of the parameter space where the gradient cannot
+be calculated. In my experience, the program will find acceptable
+starting values within 5-10 attempts, and that a failure to find a set
+of starting values in the default number of attempts usually indicates
+and problem with the model itself.
 
 Each of the models presented here are variations of the logistic
 (sigmoid) curve:
@@ -93,14 +101,14 @@ library(ggplot2)
 library(tidyverse)
 ```
 
-    ## ── Attaching packages ────────────────────────────────────────────────────────────────────── tidyverse 1.3.0 ──
+    ## ── Attaching packages ─────────────────────────────────────── tidyverse 1.3.0 ──
 
     ## ✓ tibble  3.0.1     ✓ dplyr   0.8.5
     ## ✓ tidyr   1.0.3     ✓ stringr 1.4.0
     ## ✓ readr   1.3.1     ✓ forcats 0.5.0
     ## ✓ purrr   0.3.4
 
-    ## ── Conflicts ───────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
+    ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
     ## x tidyr::extract() masks rstan::extract()
     ## x dplyr::filter()  masks stats::filter()
     ## x dplyr::lag()     masks stats::lag()
@@ -198,10 +206,11 @@ initList <- function(chain_id){
 }
 
 fit_3 <- stan(
+  verbose = FALSE,
   file = "non_linear.stan",
   data = stan_data,
-  iter = 6e2, 
-  warmup = 5e2,
+  iter = 3e2, 
+  warmup = 2e2,
   thin = 1,
   chains = 3,
   seed = 22,
@@ -299,23 +308,26 @@ logistic5 <- function(t1, t2, t3, t4, t5, x, tau){
 #Generate data from this function
 y_data = list()
 n_curves = 20
+x = seq(0, 100, by = 2) #x-axis values
+tau <- 5 #noise parameter
 for(i in 1:n_curves){
   set.seed(i^2)
-  x = seq(0, 100, by = 2) #x-axis values
-  t1 = 55
-  t2 = 25
+  t1 = rnorm(1, 55, tau)
+  t2 = rnorm(1, 25, tau)
   t3 = 2
-  t4 = 75
+  t4 = rnorm(1, 75, tau)
   t5 = 2.5
-  y_data[[i]] = logistic5(t1, t2, t3, t4, t5, x, tau = 5)
+  y_data[[i]] = logistic5(t1, t2, t3, t4, t5, x, tau)
 }
 
 y_data <- y_data  %>% 
   melt() %>%
   mutate(x=rep(seq(0, 100, by = 2), times=20))
 names(y_data) <- c("y","id","x")
-qplot(x=x, y=y, data=y_data, group=id) +
-  ggtitle("Simulated Data [noise parameter = 5]")
+qplot(x=x, y=y, data=y_data, group=id, color=id) +
+  theme_light() + 
+  ggtitle("Simulated Data") +
+  scale_color_viridis_c()
 ```
 
 <img src="README_files/figure-gfm/logistic5_example-1.png" style="display: block; margin: auto;" />
@@ -357,10 +369,11 @@ initList <- function(chain_id){
 }
 
 fit_5 <- stan(
+  verbose = FALSE,
   file = "non_linear.stan",
   data = stan_data,
-  iter = 6e2, 
-  warmup = 5e2,
+  iter = 3e2, 
+  warmup = 2e2,
   thin = 1,
   chains = 3,
   seed = 12,
@@ -459,26 +472,30 @@ logistic6 <- function(t1, t2, t3, t4, t5, t6, x, tau){
   return(y)
 }
 
+#Generate data from this function
 y_data = list()
 n_curves = 20
+x = seq(0, 100, by = 2) #x-axis values
+tau <- 5 #noise parameter
 for(i in 1:n_curves){
-  set.seed(i^6)
-  x = seq(0, 100, by = 2) #x-axis values
-  t1 = 55
-  t2 = 10
+  set.seed(i^2)
+  t1 = rnorm(1, 55, tau)
+  t2 = rnorm(1, 25, tau)
   t3 = 2
-  t4 = 65
-  t5 = 4
-  t6 = 0.5
-  y_data[[i]] = logistic6(t1, t2, t3, t4, t5, t6, x, 5)
+  t4 = rnorm(1, 75, tau)
+  t5 = 2.5
+  t6 = 0.65
+  y_data[[i]] = logistic6(t1, t2, t3, t4, t5, t6, x, tau)
 }
 
 y_data <- y_data  %>% 
   melt() %>%
   mutate(x=rep(seq(0, 100, by = 2), times=20))
 names(y_data) <- c("y","id","x")
-qplot(x=x, y=y, data=y_data, group=id) +
-  ggtitle("Simulated Data [noise parameter = 5]")
+qplot(x=x, y=y, data=y_data, group=id, color=id) +
+  theme_light() + 
+  ggtitle("Simulated Data") +
+  scale_color_viridis_c()
 ```
 
 <img src="README_files/figure-gfm/logi_6_data-1.png" style="display: block; margin: auto;" />
@@ -489,7 +506,7 @@ post <- as.matrix(fit_6) %>% data.frame()
 #get theta params
 pars <- sprintf("theta_mean.%s.", 1:6)
 thetas <- exp(post[,pars])
-  
+    
 ## Get predictions from input values
 xs <- seq(0, 100, 2)
 
@@ -533,9 +550,9 @@ ggplot() +
   geom_hline(yintercept=mean(thetas$theta_mean.1.), linetype=1, size=0.5, color="green") +
   geom_hline(yintercept=hdi(thetas$theta_mean.1.)[1], linetype=2, size=0.5, color="green") +
   geom_hline(yintercept=hdi(thetas$theta_mean.1.)[2], linetype=2, size=0.5, color="green") +
-  geom_hline(yintercept=mean(thetas$theta_mean.6.*thetas$theta_mean.1.), linetype=1, size=0.5, color="red") +
-  geom_hline(yintercept=hdi(thetas$theta_mean.6.*thetas$theta_mean.1.)[1], linetype=2, size=0.5, color="red") +
-  geom_hline(yintercept=hdi(thetas$theta_mean.6.*thetas$theta_mean.1.)[2], linetype=2, size=0.5, color="red") +
+  geom_hline(yintercept=mean(thetas$theta_mean.1.-thetas$theta_mean.6.*thetas$theta_mean.1.), linetype=1, size=0.5, color="red") +
+  geom_hline(yintercept=hdi(thetas$theta_mean.1.-thetas$theta_mean.6.*thetas$theta_mean.1.)[1], linetype=2, size=0.5, color="red") +
+  geom_hline(yintercept=hdi(thetas$theta_mean.1.-thetas$theta_mean.6.*thetas$theta_mean.1.)[2], linetype=2, size=0.5, color="red") +
   geom_vline(xintercept=mean(thetas$theta_mean.2.), linetype=1, size=0.5, color="purple") +
   geom_vline(xintercept=hdi(thetas$theta_mean.2.)[1], linetype=2, size=0.5, color="purple") +
   geom_vline(xintercept=hdi(thetas$theta_mean.2.)[2], linetype=2, size=0.5, color="purple") +
@@ -553,7 +570,7 @@ ggplot() +
 
 ![](figures/six_param.gif)
 
-## Five or Six Parameters?
+## Five or Six Parameters? - Model Selection with WAIC
 
 In some cases, it may be difficult to tell at a glance whether a five or
 six parameter curve is more appropriate for our data. In certain cases,
@@ -594,7 +611,7 @@ waic <- function (stanfit){
 The simulated generating process used here is intended to fit best to a
 six-parameter logistic curve, but whose shape will also be reasonably
 approximated by the five-parameter model. This is achieved by setting
-the value of \(\theta_6 = 0.9\).
+the value of \(\theta_6 = 0.95\).
 
 ``` r
 #Generate data from this function
@@ -609,8 +626,8 @@ for(i in 1:n_curves){
   t3 = 2
   t4 = 75
   t5 = 2.5
-  t6 = 0.9
-  y_data[[i]] = logistic6(t1, t2, t3, t4, t5, t6, x, tau = 2)
+  t6 = 0.95
+  y_data[[i]] = logistic6(t1, t2, t3, t4, t5, t6, x, tau = 5)
 }
 
 y_data <- y_data  %>% 
@@ -638,10 +655,11 @@ stan_data <- list(
 )
 
 five <- stan(
+  verbose = FALSE,
   file = "non_linear.stan",
   data = stan_data,
-  iter = 6e2, 
-  warmup = 5e2,
+  iter = 3e2, 
+  warmup = 2e2,
   thin = 1,
   chains = 3,
   seed = 2,
@@ -652,10 +670,11 @@ five <- stan(
 
 stan_data$K <- 6
 six <- stan(
+  verbose = FALSE,
   file = "non_linear.stan",
   data = stan_data,
-  iter = 6e2, 
-  warmup = 5e2,
+  iter = 3e2, 
+  warmup = 2e2,
   thin = 1,
   chains = 3,
   seed = 2,
@@ -666,18 +685,94 @@ six <- stan(
 ```
 
 ``` r
+post5 <- as.matrix(five) %>% 
+  data.frame()
+post6 <- as.matrix(six) %>% 
+  data.frame()
+
+#get theta params
+thetas5 <- exp(post5[, sprintf("theta_mean.%s.", 1:5)])
+thetas6 <- exp(post6[, sprintf("theta_mean.%s.", 1:6)])
+
+## Get predictions from input values
+xs <- seq(0, 100, 2)
+
+#Estimated mean growth curve
+y_est5 <-
+  sapply(xs, function(x)
+    logistic5(
+      t1 = thetas5[, 1],
+      t2 = thetas5[, 2],
+      t3 = thetas5[, 3],
+      t4 = thetas5[, 4],
+      t5 = thetas5[, 5],
+      x = x,
+      0
+    )) %>%
+  colMeans
+
+y_est6 <-
+  sapply(xs, function(x)
+    logistic6(
+      t1 = thetas6[, 1],
+      t2 = thetas6[, 2],
+      t3 = thetas6[, 3],
+      t4 = thetas6[, 4],
+      t5 = thetas6[, 5],
+      t6 = thetas6[, 6],
+      x = x,
+      0
+    )) %>%
+  colMeans
+
+#Credible intervals for mean growth curve
+y_ci5 <-
+  sapply(xs, function(x)
+    logistic5(
+      t1 = thetas5[, 1],
+      t2 = thetas5[, 2],
+      t3 = thetas5[, 3],
+      t4 = thetas5[, 4],
+      t5 = thetas5[, 5],
+      x = x,
+      0
+    )) %>%
+  hdi(0.95)
+
+y_ci6 <-
+  sapply(xs, function(x)
+    logistic6(
+      t1 = thetas6[, 1],
+      t2 = thetas6[, 2],
+      t3 = thetas6[, 3],
+      t4 = thetas6[, 4],
+      t5 = thetas6[, 5],
+      t6 = thetas6[, 6],
+      x = x,
+      0
+    )) %>%
+  hdi(0.95)
+
+dy = cbind(xs,
+           c(y_est5, y_est6), 
+           t(cbind(y_ci5, y_ci6))
+           ) %>%
+  data.frame()
+dy$model <- rep(c("Five","Six"), each = nrow(dy)/2)
+names(dy) <- c("x","y","lower","upper","model")
+
 ggplot() +
   theme_light() +
   ggtitle("5- and 6-Parameter Logistic Models") +
   geom_point(data=y_data, aes(x=x, y=y), color="gray10", shape=1, size=1) +
-  geom_line(data=dy, aes(x=x, y=y, color=model)) +
+  geom_line(data=dy, aes(x=x, y=y, color=model), size=1) +
   geom_ribbon(data=dy, aes(x=x, ymin=lower, ymax=upper, color=model), fill=alpha("white",0), linetype=2, size=0.5, show.legend = FALSE) +
-  scale_color_viridis_d(begin = 0.2, end=0.8) +
+  scale_color_viridis_d(begin = 0.4, end=0.8) +
   scale_x_continuous("x") +
   scale_y_continuous("y")
 ```
 
-![](README_files/figure-gfm/plot-1.png)<!-- -->
+![](README_files/figure-gfm/waic_plot-1.png)<!-- -->
 
 The model with six parameters (for added flexibility) appears to fit the
 data better, as intended. But intuition is no match for the types of
@@ -693,88 +788,329 @@ sapply(list(five, six), waic) %>%
 ```
 
     ##      waic     p_waic   lppd      p_waic_1
-    ## [1,] 5063.177 10.01275 -2521.576 9.755179
-    ## [2,] 4280.798 19.4968  -2120.902 18.89421
+    ## [1,] 6200.801 17.89129 -3082.509 17.30496
+    ## [2,] 6151.021 20.93063 -3054.58  20.33366
 
 From this table, we see that the six parameter model provides a better
-relative fit to the data (**WAIC = 4281**) than the five parameter
-alternative (**WAIC = 5063**), despite the greater
-complexity.
+relative fit to the data (**WAIC = 6152**) than the five parameter
+alternative (**WAIC = 6201**), despite the greater complexity.
 
-<!-- ## Mixture Model with NLME Components -->
+## Mixture Model with NLME Components
 
-<!-- Imagine observations produced by two separate generating processes, each occurring in a constant but unknown proportion ($\psi$) to one another. Furthermore, let us assume that each process produces data that can be readily modeled by a five parameter logistic model described here, and differ only in the values of their parameters $\theta$: -->
+Imagine observations produced by two separate generating processes,
+process A occuring at a rate of (\(\psi\)) and process B at
+(\(1-\psi\)). Furthermore, let us assume that process A produces data
+that can be readily modeled by a five parameter logistic model,
+described here, and process B by a six parameter curve.
 
-<!-- ```{r, logi_mix_data} -->
+``` r
+xs <- seq(0, 100, by = 0.5)
+psi <- 0.25 #mixture proportion
+n <- 20
+n_A <- floor(psi*n)
+n_B <- floor((1-psi)*n)
 
-<!-- xs <- seq(0, 100, by=0.5) -->
+y_A <-
+  sapply(1:n_A, function(x)
+    logistic5(
+      t1 = rnorm(1, 50, 2),
+      t2 = rnorm(1, 10, 2),
+      t3 = 2.5,
+      t4 = rnorm(1, 85),
+      t5 = 2.5,
+      x = xs,
+      tau = 5
+    )) %>% as.vector()
 
-<!-- y_1 <- sapply(1:10, function(x) logistic5(25, t2 = 3, t3 = 3, t4 = 85, t5 = 2.5, x = xs, tau=3)) %>% as.vector() -->
+y_B <-
+  sapply(1:n_B, function(x)
+    logistic6(
+      t1 = rnorm(1, 10, 2),
+      t2 = rnorm(1, 30, 2),
+      t3 = 2,
+      t4 = rnorm(1, 65, 2),
+      t5 = 4.5,
+      t6 = 1.8,
+      x = xs,
+      tau = 5
+    ))  %>%
+  as.vector()
 
-<!-- y_2 <- sapply(1:10, function(x) logistic6(30, t2 = 2, t3 = 3, t4 = 75, t5 = 1.5, t6=0.4, x = xs, tau=3))  %>%  -->
+y_data <- data.frame(x=xs, y=c(y_A, y_B))
+y_data$component <- rep(c("A","B"), times=nrow(y_data)*c(psi,1-psi))
+y_data$id <- rep(1:n, each=length(xs))
 
-<!--   as.vector() -->
+qplot(x=x, y=y, color=factor(component), data=y_data, show.legend=TRUE)  +
+  theme_light() +
+  theme(legend.position="top") +
+  scale_color_viridis_d("Process", begin=0.2, end=0.8, alpha=0.7) +
+  ggtitle("Generated Data (labeled)")
+```
 
-<!-- dy <- data.frame(x=xs, y=c(y_1, y_2)) -->
+![](README_files/figure-gfm/logi_mix_data-1.png)<!-- -->
 
-<!-- dy$component <- rep(c("1","2"), each=nrow(dy)/2) -->
+``` r
+qplot(x=x, y=y, data=y_data) +
+  ggtitle("Generated Data (unlabeled)") +
+  theme_light()
+```
 
-<!-- dy$id <- rep(1:20, each=length(xs)) -->
+![](README_files/figure-gfm/logi_mix_data-2.png)<!-- -->
 
-<!-- qplot(x=x, y=y, color=factor(component), data=dy, show.legend=FALSE)  + ggtitle("Generated Data (labeled)") -->
+The goal of the mixture model is to recover the component labels of each
+data point as well as estimate the parameter values of each sub-model.
 
-<!-- qplot(x=x, y=y, data=dy) + ggtitle("Generated Data (unlabeled)") -->
+One drawback of The NUTS algorithm can only estimate continuous
+parameters, not discrete parameters like mixture probabilities.
+Therefore, we will instead sum out the mixture proportions and estimate
+the model from its marginal likelihood function, using the `log_mix`
+function in Stan.
+
+![](figures/mixture.gif)
+
+Once the model is fitted, we can then recover the component membership
+probabilities for each observation using Bayes’ theorem:
+
+![](figures/bayes.gif)
+
+The code for calculating component membership probabilities is found in
+the `generated quantities` block. Once fitted, each observation *n* can
+be assigned membership to a model component *z* by averaging over the
+*R* membership probabilities from each realization *r* (sample) from the
+model posterior:
+
+![](figures/psi_hat.gif)
+
+``` r
+stan_data <- list(
+  N = nrow(y_data),
+  I = max(y_data$id),
+  id = y_data$id,
+  K = 6,
+  x = y_data$x,
+  y = y_data$y
+)
+
+#Function to pass initial values
+initList <- function(chain_id){
+  list(
+    "Psi" = -0.6,
+    "sigma" = c(3, 3),
+    "lambda_mean[1]" = rep(log(50), stan_data$I),
+    "lambda_mean[2]" = rep(log(10), stan_data$I),
+    "lambda_mean[3]" = rep(log(2.5), stan_data$I),
+    "lambda_mean[4]" = rep(log(85), stan_data$I),
+    "lambda_mean[5]" = rep(log(2.5), stan_data$I),
+    "theta_mean[1]" = rep(log(10), stan_data$I),
+    "theta_mean[2]" = rep(log(30), stan_data$I),
+    "theta_mean[3]" = rep(log(2), stan_data$I),
+    "theta_mean[4]" = rep(log(65), stan_data$I),
+    "theta_mean[5]" = rep(log(4.5), stan_data$I),
+    "theta_mean[6]" = rep(log(1.4), stan_data$I),
+    "sigma_lambda" = rep(0.001, stan_data$K-1),
+    "sigma_theta" = rep(0.001, stan_data$K)
+  )
+}
+
+control_mix <- control.
+control_mix$adapt_delta <- 0.95
+fit_mix <- stan(
+  verbose = FALSE,
+  file = "non_linear_mixture.stan",
+  data = stan_data,
+  iter = 3e2,
+  warmup = 2e2,
+  thin = 1,
+  chains = 3,
+  seed = 2,
+  init = initList,
+  pars = c("Psi", "psi", "theta_i", "lambda_i", "sigma", "theta_mean", "lambda_mean"),
+  control = control_mix
+)
+```
+
+<!-- ```{r fit_mix_results} -->
+
+<!-- post_mix <- as.matrix(fit_mix) %>%  -->
+
+<!--   data.frame() -->
+
+<!-- #get theta params -->
+
+<!-- lambdas <- post_mix[, sprintf("lambda_mean.%s.", 1:5)] %>%  -->
+
+<!--   exp() -->
+
+<!-- thetas <- post_mix[, sprintf("theta_mean.%s.", 1:6)] %>% -->
+
+<!--   exp() -->
+
+<!-- psi <- post_mix[,sprintf("psi.%s.", 1:stan_data$N)] -->
+
+<!-- Psi <- post_mix[,"Psi"] %>%  -->
+
+<!--   boot::inv.logit() -->
+
+<!-- ## Get predictions from input values -->
+
+<!-- xs <- seq(0, 100, 2) -->
+
+<!-- #Estimated mean logistic curves -->
+
+<!-- y_est_A <- -->
+
+<!--   sapply(xs, function(x) -->
+
+<!--     logistic5( -->
+
+<!--       t1 = lambdas[, 1], -->
+
+<!--       t2 = lambdas[, 2], -->
+
+<!--       t3 = lambdas[, 3], -->
+
+<!--       t4 = lambdas[, 4], -->
+
+<!--       t5 = lambdas[, 5], -->
+
+<!--       x = x, -->
+
+<!--       0 -->
+
+<!--     )) %>% -->
+
+<!--   colMeans -->
+
+<!-- y_est_B <- -->
+
+<!--   sapply(xs, function(x) -->
+
+<!--     logistic6( -->
+
+<!--       t1 = thetas[, 1], -->
+
+<!--       t2 = thetas[, 2], -->
+
+<!--       t3 = thetas[, 3], -->
+
+<!--       t4 = thetas[, 4], -->
+
+<!--       t5 = thetas[, 5], -->
+
+<!--       t6 = thetas[, 6], -->
+
+<!--       x = x, -->
+
+<!--       0 -->
+
+<!--     )) %>% -->
+
+<!--   colMeans -->
+
+<!-- #Credible intervals -->
+
+<!-- y_ci_A <- -->
+
+<!--   sapply(xs, function(x) -->
+
+<!--     logistic5( -->
+
+<!--       t1 = lambdas[, 1], -->
+
+<!--       t2 = lambdas[, 2], -->
+
+<!--       t3 = lambdas[, 3], -->
+
+<!--       t4 = lambdas[, 4], -->
+
+<!--       t5 = lambdas[, 5], -->
+
+<!--       x = x, -->
+
+<!--       0 -->
+
+<!--     )) %>% -->
+
+<!--   hdi(0.95) -->
+
+<!-- y_ci_B <- -->
+
+<!--   sapply(xs, function(x) -->
+
+<!--     logistic6( -->
+
+<!--       t1 = thetas[, 1], -->
+
+<!--       t2 = thetas[, 2], -->
+
+<!--       t3 = thetas[, 3], -->
+
+<!--       t4 = thetas[, 4], -->
+
+<!--       t5 = thetas[, 5], -->
+
+<!--       t6 = thetas[, 6], -->
+
+<!--       x = x, -->
+
+<!--       0 -->
+
+<!--     )) %>% -->
+
+<!--   hdi(0.95) -->
+
+<!-- dy = cbind(xs, -->
+
+<!--            c(y_est_A, y_est_B),  -->
+
+<!--            t(cbind(y_ci_A, y_ci_B)) -->
+
+<!--            ) %>% -->
+
+<!--   data.frame() -->
+
+<!-- dy$model <- rep(c("A","B"), each = nrow(dy)/2) -->
+
+<!-- names(dy) <- c("x","y","lower","upper","model") -->
+
+<!-- a_prob = Psi %>% mean() %>% round(2) -->
+
+<!-- y_data$prob = colMeans(psi) -->
+
+<!-- y_data$z = ifelse(y_data$prob > 0.5, sprintf("A (%s)", a_prob), sprintf("B (%s)", 1-a_prob)) -->
+
+<!-- y_data$alpha = ifelse(y_data$prob > 0.5, y_data$prob, 1-y_data$prob) -->
+
+<!-- #Plot data and predictions -->
+
+<!-- ggplot() + -->
+
+<!--   theme_light() + -->
+
+<!--   ggtitle("NLME Mixture Model") + -->
+
+<!--   geom_point(data=y_data, aes(x=x, y=y, color=z), shape=1, size=1) + -->
+
+<!--   geom_line(data=dy, aes(x=x, y=y, color=model), show.legend=FALSE) + -->
+
+<!--   geom_ribbon(data=dy, aes(x=x, ymin=lower, ymax=upper, color=model), fill=alpha("white",0), linetype=2, size=0.5, show.legend = FALSE) + -->
+
+<!--   scale_color_viridis_d("Process", begin = 0.2, end=0.8) + -->
+
+<!--   scale_x_continuous("x") + -->
+
+<!--   scale_y_continuous("y") -->
 
 <!-- ``` -->
 
-<!-- ```{r logi_mix_fit} -->
-
-<!-- stan_data <- list( -->
-
-<!--   N = nrow(dy), -->
-
-<!--   I = max(dy$id), -->
-
-<!--   id = dy$id, -->
-
-<!--   K = 6, -->
-
-<!--   x = dy$x, -->
-
-<!--   y = dy$y -->
-
-<!-- ) -->
-
-<!-- fit_mix <- stan( -->
-
-<!--   file = "non_linear_mixture.stan", -->
-
-<!--   data = stan_data, -->
-
-<!--   iter = 6e2,  -->
-
-<!--   warmup = 5e2, -->
-
-<!--   thin = 1, -->
-
-<!--   chains = 3, -->
-
-<!--   seed = 2, -->
-
-<!--   # init = initList, -->
-
-<!--   pars = c("psi","theta_i","lambda_i","sigma"), -->
-
-<!--   control = control. -->
-
-<!-- ) -->
-
-<!-- ``` -->
+Combining NLME models in a mixture model is sure asking a lot from the
+optimizer. But, the NUTS algorithm and Stan language proved to be up to
+the task, and make the process of implementing highly customized models
+like these.
 
 ## Stan Code
 
-The raw Stan code for fitting the 3-, 5-, and 6-parameter logistic
-growth curves.
+The Stan code for fitting the 3-, 5-, and 6-parameter logistic curves.
 
     functions{
       
