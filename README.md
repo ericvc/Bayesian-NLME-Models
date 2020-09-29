@@ -5,12 +5,12 @@ Bayesian Nonlinear Mixed-Effects Models in Stan
 
 I thought I would share some old code I stumbled upon for fitting
 Bayesian Nonlinear mixed-effect (NLME) models with Stan and R. The model
-code can be found in the `non_linear.stan` file or at the bottom of this
-README. The models presented here are taken from or adapted from work
-presented in Pinheiro and Bates’ (2000) book [*Nonlinear Mixed-Effects
-Models in S and S-PLUS*](https://link.springer.com/book/10.1007/b98882),
-which remains an excellent resource for anyone wanting a deep-dive into
-the background of nonlinear models and methods for their estimation.
+code can be found in the `non_linear.stan` file. The models presented
+here are taken from or adapted from work presented in Pinheiro and
+Bates’ (2000) book [*Nonlinear Mixed-Effects Models in S and
+S-PLUS*](https://link.springer.com/book/10.1007/b98882), which remains
+an excellent resource for anyone wanting a deep-dive into the background
+of nonlinear models and methods for their estimation.
 
 Nonlinear models are wonderful tools for parametric modeling of diverse
 phenomena, with applications spanning numerous academic disciplines. I
@@ -53,31 +53,14 @@ starting values within 5-10 attempts, and that a failure to find a set
 of starting values in the default number of attempts usually indicates a
 problem with the model itself.
 
-Each of the models presented here are variations of the logistic
-(sigmoid) curve:
+In the following sections I will cover:
 
-  - Three Paramters: The standard logistic curve with multilevel
-    parameters
-  - Five Parameters: Two logistic curves added together, with differing
-    rates and midpoints but a shared upper *y* limit
-  - Six Parameters: Two logistic curves added together, with differing
-    rates, midpoints, and *y* values of their lower asymptote(s)
+  - Model fitting and evaluation with RStan
+  - Model comparisons with WAIC
+  - Mixture models with nonlinear mixed-effect
+    components
 
-The parameters of the logistic curves (“thetas”) are modeled as
-random-effects.
-
-![](figures/mm.gif)
-
-The Stan model used here also uses non-centering for estimation of
-multilevel parameters. More details about non-centering and how it can
-improve model fitting are described in [Chapter 22.7 of the Stan
-Language
-Manual](https://mc-stan.org/docs/2_24/stan-users-guide/reparameterization-section.html).
-
-The models were estimated using Stan and RStan API package for R. Before
-launching into model-fitting, some critical packages need to be loaded
-and hyperparameter options need to be
-    set.
+<!-- end list -->
 
 ``` r
 library(rstan)
@@ -165,7 +148,34 @@ control. <- list(
 )
 ```
 
-## Three Parameter Model
+## Model Fitting
+
+Each of the models presented here are variations of the logistic
+(sigmoid) curve:
+
+  - Three Paramters: The standard logistic curve with multilevel
+    parameters
+  - Five Parameters: Two logistic curves added together, with differing
+    rates and midpoints but a shared upper *y* limit
+  - Six Parameters: Two logistic curves added together, with differing
+    rates, midpoints, and *y* values of their lower asymptote(s)
+
+The parameters of the logistic curves (“thetas”) are modeled as
+random-effects.
+
+![](figures/mm.gif)
+
+The Stan model used here also uses non-centering for estimation of
+multilevel parameters. More details about non-centering and how it can
+improve model fitting are described in [Chapter 22.7 of the Stan
+Language
+Manual](https://mc-stan.org/docs/2_24/stan-users-guide/reparameterization-section.html).
+
+The models were estimated using Stan and RStan API package for R. Before
+launching into model-fitting, some critical packages need to be loaded
+and hyperparameter options need to be set.
+
+### Three Parameter Model
 
 The traditional logistic curve is used for modeling all sorts of data,
 and you may also recognize it as the same function used as the
@@ -231,8 +241,6 @@ fit_3 <- stan(
   control = control.
 )
 ```
-
-    ## hash mismatch so recompiling; make sure Stan code ends with a blank line
 
 Now that the model is fitted, let’s do some quick visual checks of the
 predictions against the raw observations.
@@ -305,7 +313,7 @@ point on the x-axis is given from the parameter \(\bar{\theta}_2\)
 (purple). This model predicts that the midpoint of tree growth occurs at
 roughly 11.8 years (95% HPDI: 11.3-12.3) of age.
 
-## Five Parameter Model
+### Five Parameter Model
 
 The five parameter logistic model is actually the difference of two
 logistic curves, each sharing a common upper *y* limit but different
@@ -471,7 +479,7 @@ ggplot() +
 
 ![](figures/five_param.gif)
 
-## Six Parameter Model
+### Six Parameter Model
 
 This version is actually a modified version of the five parameter model,
 and was not included in Pinheiro and Bates (2000). Like the previous
@@ -1046,7 +1054,7 @@ ggplot(data=y_data, aes(x=x, y=y, color=process)) +
   theme(legend.position = "top",
         legend.text=element_text(size=11)) +
   ggtitle("NLME Mixture Model") +
-  geom_point(shape=1, size=1, show.legend = TRUE) +
+  geom_point(shape=1, size=2, alpha=1, show.legend = TRUE) +
   geom_line(data=dy, aes(x=x, y=y, color=process), inherit.aes = FALSE, show.legend = FALSE) +
   geom_ribbon(data=dy, aes(x=x, ymin=lower, ymax=upper, color=process), fill=alpha("white",0), linetype=2, size=0.5, show.legend = FALSE, inherit.aes = FALSE) +
   scale_color_viridis_c("Process", begin = 0.2, end=0.8) +
@@ -1122,256 +1130,8 @@ As shown in the inset of the figure above, the posterior distribution of
 the mixture proportion \(\psi\) was multimodal, although the mean
 estimate matched its true value of 0.25 (\(\hat{\psi}\) = 0.25
 \[0.20-0.38\]; 95% HPDI). I have found the mixture proportion parameter
-to be the most difficult to play well with the sampler, and so am not
-surprised that this is the case here, but it is worth mentioning as
-something to look out for.
-
-## Stan Code
-
-The Stan code for fitting the 3-, 5-, and 6-parameter logistic curves.
-
-    functions{
-      
-      real logistic3(real x, vector theta){
-        /* 
-        -3 parameter logistic function-
-        theta[1] is the upper y-asymptote
-        theta[2] is the x-coordinate of the first inflection point
-        theta[3] is the rate parameter (stepness of curve)
-        */
-        real y;
-        y = theta[1] / (1+exp((theta[2]-x)/theta[3]));
-        return y;
-      }
-      
-      real logistic5(real x, vector theta){
-        /* 
-        -5 parameter logistic function-
-        theta[1] is the upper y-asym-ptote
-        theta[2] is the x-coordinate of the first inflection point
-        theta[3] is the first growth rate parameter
-        theta[4] is the x-coordinate of the second inflection point
-        theta[5] is the second growth rate parameter
-        */
-        real y;
-        y = theta[1] / (1+exp((theta[2]-x)/theta[3])) - 
-            theta[1] / (1+exp((theta[4]-x)/theta[5]));
-        return y;
-      }
-      
-      real logistic6(real x, vector theta){
-        /*
-        -6 parameter logistic function-
-        theta[1] is the upper y-asymptote
-        theta[2] is the x-coordinate of the first inflection point
-        theta[3] is the first growth rate parameter
-        theta[4] is the x-coordinate of the second inflection point
-        theta[5] is the second growth rate parameter
-        theta[6] is related to the value of the second lower asymptote
-        */
-        real y;
-        y = theta[1] / (1+exp((theta[2]-x)/theta[3])) - 
-            (theta[1]*theta[6]) / (1+exp((theta[4]-x)/theta[5]));
-        return y;
-      }
-    
-      real logisticN(real x, vector theta){
-        /* 
-        Wrapper function for all NLME models. The size of the parameter vector is checked, 
-        which determines the function to call.
-        */
-        int K = rows(theta);
-        real y;
-        if(K == 3){
-          y = logistic3(x, theta);
-        }
-        if(K == 5){
-          y = logistic5(x, theta);
-        }
-        if(K == 6){
-          y = logistic6(x, theta);
-        }
-        return y;
-      }
-      
-      vector nc_exp(vector mu, vector sigma, vector nu){
-        /* "Non-centering"" decomposition for multilevel parameters
-        mu_i = mu + sigma * nu
-        nu ~ normal(0, 1)
-        Same as: mu_i ~ normal(mu, sigma)
-        See: https://mc-stan.org/docs/2_24/stan-users-guide/reparameterization-section.html
-        */
-        return exp(mu + sigma .* nu);
-      }
-      
-      vector nc_linear(vector mu, vector sigma, vector nu){
-        /* "Non-centering"" decomposition for multilevel parameters
-        mu_i = mu + sigma * nu
-        nu ~ normal(0, 1)
-        Same as: mu_i ~ normal(mu, sigma)
-        See: https://mc-stan.org/docs/2_24/stan-    if(K == 3){
-          y = logistic3(x, theta);
-        }
-        if(K == 5){
-          y = logistic5(x, theta);
-        }
-        if(K == 6){
-          y = logistic6(x, theta);
-        }
-        return y;
-      }
-      
-      vector nc_exp(vector mu, vector sigma, vector nu){
-        /* "Non-centering"" decomposition for multilevel parameters
-        mu_i = mu + sigma * nu
-        nu ~ normal(0, 1)
-        Same as: mu_i ~ normal(mu, sigma)
-        See: https://mc-stan.org/docs/2_24/stan-users-guide/reparameterization-section.html
-        */
-        return exp(mu + sigma .* nu);
-      }
-      
-      vector nc_linear(vector mu, vector sigma, vector nu){
-        /* "Non-centering"" decomposition for multilevel parameters
-        mu_i = mu + sigma * nu
-        nu ~ normal(0, 1)
-        Same as: mu_i ~ normal(mu, sigma)
-        See: https://mc-stan.org/docs/2_24/stan-users-guide/reparameterization-section.html
-        */
-        return mu + sigma .* nu;
-      }
-    
-    }
-    
-    data{
-      
-      int N; // total num obs
-      int K; // number parameters
-      int I; // number of clusters
-      int id[N]; //index of cluster id
-      vector[N] x;
-      vector[N] y;
-      
-    }
-    
-    parameters{
-      
-      real<lower=0> sigma; // error
-      vector[K] theta_mean; // pop. mean
-      vector<lower=0>[K] sigma_theta; // pop. var
-      vector[K] theta_norm[I]; // unit normals
-    
-    }
-    
-    transformed parameters{
-      
-      vector<lower=0>[K] theta_i[I]; // random effect coefficients
-      
-      for(i in 1:I){
-        theta_i[i] = nc_exp(theta_mean, sigma_theta, theta_norm[i]);
-      }
-    
-    }
-    
-    model{
-      
-      // loop over observations
-      for(n in 1:N){
-        real mu = logisticN(x[n], theta_i[id[n]]);
-        target += normal_lpdf(y[n] | mu, sigma); // increment log prob
-      }
-        
-      // priors
-      theta_mean ~ normal(0, 1);
-      sigma ~ normal(0, 1);
-      sigma_theta ~ normal(0, 1);
-      for(i in 1:I){
-        theta_norm[i] ~ normal(0, 1);
-      }
-      
-    }
-    
-    generated quantities{
-    
-      vector[N] y_hat; // predicted values
-      vector[N] log_lik; // log-likelihood
-    
-      for(n in 1:N){
-        real mu;
-        mu = logisticN(x[n], theta_i[id[n]]);
-        y_hat[n] = normal_rng(mu, sigma);
-        log_lik[n] = normal_lpdf(y[n] | logisticN(x[n], theta_i[id[n]]), sigma);
-      }
-    
-    }
-    users-guide/reparameterization-section.html
-        */
-        return mu + sigma .* nu;
-      }
-    
-    }
-    
-    data{
-      
-      int N; // total num obs
-      int K; // number parameters
-      int I; // number of clusters
-      int id[N]; //index of cluster id
-      vector[N] x;
-      vector[N] y;
-      
-    }
-    
-    parameters{
-      
-      real<lower=0> sigma; // error
-      vector[K] theta_mean; // pop. mean
-      vector<lower=0>[K] sigma_theta; // pop. var
-      vector[K] theta_norm[I]; // unit normals
-    
-    }
-    
-    transformed parameters{
-      
-      vector<lower=0>[K] theta_i[I]; // random effect coefficients
-      
-      for(i in 1:I){
-        theta_i[i] = nc_exp(theta_mean, sigma_theta, theta_norm[i]);
-      }
-    
-    }
-    
-    model{
-      
-      // loop over observations
-      for(n in 1:N){
-        real mu = logisticN(x[n], theta_i[id[n]]);
-        target += normal_lpdf(y[n] | mu, sigma); // increment log prob
-      }
-        
-      // priors
-      theta_mean ~ normal(0, 1);
-      sigma ~ normal(0, 1);
-      sigma_theta ~ normal(0, 1);
-      for(i in 1:I){
-        theta_norm[i] ~ normal(0, 1);
-      }
-      
-    }
-    
-    generated quantities{
-    
-      vector[N] y_hat; // predicted values
-      vector[N] log_lik; // log-likelihood
-    
-      for(n in 1:N){
-        real mu;
-        mu = logisticN(x[n], theta_i[id[n]]);
-        y_hat[n] = normal_rng(mu, sigma);
-        log_lik[n] = normal_lpdf(y[n] | logisticN(x[n], theta_i[id[n]]), sigma);
-      }
-    
-    }
+to be the most difficult to get to play well with the sampler, and so am
+not surprised that this is the case here.
 
 ## References
 
