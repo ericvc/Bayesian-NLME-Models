@@ -5,25 +5,23 @@ output: github_document
 
 ## Introduction
 
-I thought I would share some old code I stumbled upon for fitting Bayesian Nonlinear mixed effect (NLME) models with Stan and R. The model code can be found in the `non_linear.stan` file or at the bottom of this README. The models presented here are taken from or adapted from work presented by Pinheiro and Bates' (2000) book [*Nonlinear Mixed-Effects Models in S and S-PLUS*](https://link.springer.com/book/10.1007/b98882), which remains an excellent resource for anyone wanting a deep-dive into the background of nonlinear models and methods for their estimation.
+I thought I would share some old code I stumbled upon for fitting Bayesian Nonlinear mixed-effect (NLME) models with Stan and R. The model code can be found in the `non_linear.stan` file or at the bottom of this README. The models presented here are taken from or adapted from work presented in Pinheiro and Bates' (2000) book [*Nonlinear Mixed-Effects Models in S and S-PLUS*](https://link.springer.com/book/10.1007/b98882), which remains an excellent resource for anyone wanting a deep-dive into the background of nonlinear models and methods for their estimation.
 
-Nonlinear models are wonderful tools for parametric modeling of diverse phenomena, with applications spanning numerous academic disciplines. I have found that these models are particularly well-suited for time series data due to their flexibility, which can capture chages in characteristic rates over segments of a curve, and the ease with which model parameters can be interpreted. For example, in many cases, model parameters will correspond to important locations along the support axis where the midpoint or other key features of a logistic curve occur. Pinheiro and Bates (2000) also show that these models can be easily extended to incorporate hierachical data structures. For these reasons, I generally prefer nonlinear mixed-effect models over non-parametric methods for fitting nonlinear curves, such as splines or generalized additive models.
+Nonlinear models are wonderful tools for parametric modeling of diverse phenomena, with applications spanning numerous academic disciplines. I have found that these models are particularly well-suited for time series data due to their flexibility, which can capture chages in characteristic rates over segments of a curve, and the ease with which the model parameters can be interpreted. For example, in many cases, model parameters will correspond to important locations along the support axis where the midpoint or other key features of a logistic curve occur. Pinheiro and Bates (2000) also show that these models can be easily extended to incorporate hierachical data structures. For these reasons, I generally prefer NLME models over non-parametric methods for fitting nonlinear curves, such as splines or generalized additive models.
 
-In the past, a major drawback of NLMEs was that they could be difficult to fit using maximum likelihood and related optimization methods. This is due to the multimodal nature of the posterior distribution of nonlinear models specifically and multilevel models more generally. Often times, fitting these models also required providing the optimization algorithm with informative starting values or by using specialized functions to search a grid of potential starting values to locate a favorable region of the parameter space (see `nlme::SSlogis`). 
+In the past, a major drawback of NLMEs was that they could be difficult to fit using maximum likelihood or related optimization methods due to the multimodal nature of the posterior distributions. As a result, the posteriors of nonlinear models specifically, and multilevel models more generally, often defy the common assumption of these methods that the posterior can be approximated by Gaussian distributions. Furthermore, fitting these models also required providing the optimization algorithm with informative starting values or by using specialized functions to search a grid of potential starting values to locate a favorable region of the parameter space to begin optimization (see `nlme::SSlogis`). 
 
-Advances in Bayesian estimation since Pinheiro and Bates' (2000) book have largely circumvented these issues. The latest MCMC sampling algorithms (e.g., No-U-Turn and Hamiltonian Monte Carlo) are capable of efficiently exploring the parameter space of even poorly behaved (i.e., multimodal and non-Gaussian) model posteriors, and can therefore provide reliable estimates of mulitlevel parameters. Relatedly, Bayesian estimation of NLME models may also be less sensitive to poor choices of starting values. Using Stan, potential starting values for the algorithm are sampled from a parameter's prior distribution (if none are provided by the user), and repeated attempts will be made if a set of values happens to be in region of the parameter space where the gradient cannot be calculated. In my experience, the program will find acceptable starting values within 5-10 attempts, and that a failure to find a set of starting values in the default number of attempts usually indicates and problem with the model itself.
+Advances in Bayesian estimation since Pinheiro and Bates' (2000) book have largely circumvented these issues. The latest MCMC sampling algorithms (e.g., No-U-Turn and Hamiltonian Monte Carlo) are capable of efficiently exploring the parameter space of even poorly behaved (i.e., multimodal and non-Gaussian) model posteriors, and can therefore provide reliable estimates of mulitlevel parameters. Additionally, Bayesian estimation of NLME models may also be less sensitive to poor choices of starting values. Using Stan, potential starting values for the algorithm are sampled from a parameter's prior distribution (if none are provided by the user), and repeated attempts will be made if a set of values happens to be in region of the parameter space where the gradient cannot be calculated. In my experience, the program will find acceptable starting values within 5-10 attempts, and that a failure to find a set of starting values in the default number of attempts usually indicates a problem with the model itself.
 
 Each of the models presented here are variations of the logistic (sigmoid) curve:
 
 * Three Paramters: The standard logistic curve with multilevel parameters
-* Five Parameters: Two logistic curves added together, with differing rates and inflection points but a shared upper *y* limit
-* Six Parameters: Two logistic curves added together, with differing rates, inflection points, and *y* values of their lower asymptote(s)
+* Five Parameters: Two logistic curves added together, with differing rates and midpoints but a shared upper *y* limit
+* Six Parameters: Two logistic curves added together, with differing rates, midpoints, and *y* values of their lower asymptote(s)
 
 The parameters of the logistic curves ("thetas") are modeled as random-effects.
 
 ![](figures/mm.gif)
-
-Here, *I* is the number of clusters in the dataset, *K* is the number of parameters in the curve function, and *y* is the *t*-th observation of the dependent variable for the *i*-th cluster.
 
 The Stan model used here also uses non-centering for estimation of multilevel parameters. More details about non-centering and how it can improve model fitting are described in [Chapter 22.7 of the Stan Language Manual](https://mc-stan.org/docs/2_24/stan-users-guide/reparameterization-section.html).
   
@@ -32,10 +30,12 @@ The models were estimated using Stan and RStan API package for R. Before launchi
 ```{r setup}
 library(rstan)
 library(ggplot2)
+library(ggplotify)
 library(tidyverse)
 library(datasets)
 library(HDInterval)
 library(reshape)
+library(caret)
 
 #Define Stan model fitting options
 rstan_options(auto_write = TRUE) #saves compiled stan model to storage
@@ -114,8 +114,10 @@ Now that the model is fitted, let's do some quick visual checks of the predictio
 
 ```{r logistic3_plot, warning=FALSE, fig.align="center"}
 #Define function for convenience
-logistic3 <- function(t1, t2, t3, x){
-  t1/(1+exp((t2-x)/t3))
+logistic3 <- function(t1, t2, t3, x, tau=0){
+  y <- t1/(1+exp((t2-x)/t3))
+  y <- y + rnorm(length(x), 0, tau)
+  return(y)
 }
 
 #Get posterior samples from fitted model
@@ -224,7 +226,7 @@ qplot(x=x, y=y, data=y_data, group=id, color=id) +
   scale_color_viridis_c()
 ```
 
-[Papworth et al. (2012)](https://besjournals.onlinelibrary.wiley.com/doi/10.1111/j.2041-210X.2012.00189.x) used such a model to examine the movement behavior of human central-place foragers, with the net displacement of individuals from the location of their home over the course of a given day serving as the dependent variable for the analysis. From their fitted model parameters, the authors of the study were then able to determine how the choice of foraging routes influenced the timing, maximum displacement, and degree of individual variation in observed movement behavior.
+[Papworth et al. (2012)](https://besjournals.onlinelibrary.wiley.com/doi/10.1111/j.2041-210X.2012.00189.x) used such a model to examine the movement behavior of human central-place foragers, with the net displacement of individuals from the location of their home over the course of a given day serving as the response variable in their analysis. From their fitted model parameters, the authors of the study were then able to determine how the choice of foraging routes influenced the timing, maximum displacement, and degree of individual variation in observed movement behavior.
 
 Here, I fit the Stan model to the example data generated above. Again, we must first put our data into a list for Stan before running the model.
 
@@ -664,48 +666,48 @@ ggplot() +
 The model with six parameters (for added flexibility) appears to fit the data better, as intended. But intuition is no match for the types of insights that can be obtained from such heady fields as information theory (right?).
 
 Using the functions we defined before, we can also assess the relative fit of each model using their WAIC scores.
+
 ```{r waic_calc}
 sapply(list(five, six), waic) %>% 
   t()
 
 ```
 
-From this table, we see that the six parameter model provides a better relative fit to the data (**WAIC = 6152**) than the five parameter alternative (**WAIC = 6201**), despite the greater complexity.
+From this table, we see that the six parameter model provides a better relative fit to the data (**WAIC = 6151**) than the five parameter alternative (**WAIC = 6201**), despite the greater complexity.
 
 ## Mixture Model with NLME Components
 
-Imagine observations produced by two separate generating processes, process A occuring at a rate of ($\psi$) and process B at ($1-\psi$). Furthermore, let us assume that process A produces data that can be readily modeled by a five parameter logistic model, described here, and process B by a six parameter curve.
+Imagine observations produced by two separate generating processes, process A occuring at a rate of ($\psi$) and process B at ($1-\psi$). Furthermore, let us assume that process A produces data that can be readily modeled by a three parameter logistic model, described here, and process B by a six parameter curve.
 
 ```{r, logi_mix_data}
-xs <- seq(0, 100, by = 0.5)
+xs <- seq(0, 100, by = 2)
 psi <- 0.25 #mixture proportion
-n <- 20
+n <- 80
 n_A <- floor(psi*n)
 n_B <- floor((1-psi)*n)
 
+set.seed(222)
 y_A <-
   sapply(1:n_A, function(x)
-    logistic5(
-      t1 = rnorm(1, 50, 2),
-      t2 = rnorm(1, 10, 2),
+    logistic3(
+      t1 = rnorm(1, 60, 2),
+      t2 = rnorm(1, 50, 2),
       t3 = 2.5,
-      t4 = rnorm(1, 85),
-      t5 = 2.5,
       x = xs,
-      tau = 5
+      tau = 3
     )) %>% as.vector()
 
 y_B <-
   sapply(1:n_B, function(x)
     logistic6(
-      t1 = rnorm(1, 10, 2),
-      t2 = rnorm(1, 30, 2),
+      t1 = rnorm(1, 20, 2),
+      t2 = rnorm(1, 17, 2),
       t3 = 2,
-      t4 = rnorm(1, 65, 2),
-      t5 = 4.5,
-      t6 = 1.8,
+      t4 = rnorm(1, 85, 2),
+      t5 = 0.5,
+      t6 = 0.7,
       x = xs,
-      tau = 5
+      tau = 3
     ))  %>%
   as.vector()
 
@@ -727,7 +729,7 @@ qplot(x=x, y=y, data=y_data) +
 
 The goal of the mixture model is to recover the component labels of each data point as well as estimate the parameter values of each sub-model.
 
-One drawback of The NUTS algorithm can only estimate continuous parameters, not discrete parameters like mixture probabilities. Therefore, we will instead sum out the mixture proportions and estimate the model from its marginal likelihood function, using the `log_mix` function in Stan.
+One drawback of the NUTS algorithm is that it cannot sample discrete parameters like mixture probabilities. Therefore, we will instead sum out the mixture proportions and optimize the model from its marginal likelihood function, using the `log_mix` function in Stan.
 
 ![](figures/mixture.gif)
 
@@ -739,11 +741,12 @@ The code for calculating component membership probabilities is found in the `gen
 
 ![](figures/psi_hat.gif)
 
-```{r logi_mix_fit, eval=FALSE}
+```{r logi_mix_fit, eval=TRUE, warning=FALSE}
 stan_data <- list(
   N = nrow(y_data),
   I = max(y_data$id),
   id = y_data$id,
+  J = 3,
   K = 6,
   x = y_data$x,
   y = y_data$y
@@ -753,25 +756,24 @@ stan_data <- list(
 initList <- function(chain_id){
   list(
     "Psi" = -0.6,
-    "sigma" = c(3, 3),
-    "lambda_mean[1]" = rep(log(50), stan_data$I),
-    "lambda_mean[2]" = rep(log(10), stan_data$I),
+    "sigma" = c(0.1, 0.1),
+    "lambda_mean[1]" = rep(log(60), stan_data$I),
+    "lambda_mean[2]" = rep(log(50), stan_data$I),
     "lambda_mean[3]" = rep(log(2.5), stan_data$I),
-    "lambda_mean[4]" = rep(log(85), stan_data$I),
-    "lambda_mean[5]" = rep(log(2.5), stan_data$I),
-    "theta_mean[1]" = rep(log(10), stan_data$I),
-    "theta_mean[2]" = rep(log(30), stan_data$I),
+    "theta_mean[1]" = rep(log(25), stan_data$I),
+    "theta_mean[2]" = rep(log(17), stan_data$I),
     "theta_mean[3]" = rep(log(2), stan_data$I),
-    "theta_mean[4]" = rep(log(65), stan_data$I),
-    "theta_mean[5]" = rep(log(4.5), stan_data$I),
-    "theta_mean[6]" = rep(log(1.4), stan_data$I),
-    "sigma_lambda" = rep(0.001, stan_data$K-1),
+    "theta_mean[4]" = rep(log(85), stan_data$I),
+    "theta_mean[5]" = rep(log(0.5), stan_data$I),
+    "theta_mean[6]" = rep(log(0.7), stan_data$I),
+    "sigma_lambda" = rep(0.001, stan_data$J),
     "sigma_theta" = rep(0.001, stan_data$K)
   )
 }
 
 control_mix <- control.
-control_mix$adapt_delta <- 0.95
+control_mix$stepsize <- 1e-4
+control_mix$adapt_delta <- 0.99
 fit_mix <- stan(
   verbose = FALSE,
   file = "non_linear_mixture.stan",
@@ -787,104 +789,131 @@ fit_mix <- stan(
 )
 ```
 
-<!-- ```{r fit_mix_results} -->
-<!-- post_mix <- as.matrix(fit_mix) %>%  -->
-<!--   data.frame() -->
+```{r fit_mix_results}
+post_mix <- as.matrix(fit_mix) %>%
+  data.frame()
 
-<!-- #get theta params -->
-<!-- lambdas <- post_mix[, sprintf("lambda_mean.%s.", 1:5)] %>%  -->
-<!--   exp() -->
-<!-- thetas <- post_mix[, sprintf("theta_mean.%s.", 1:6)] %>% -->
-<!--   exp() -->
-<!-- psi <- post_mix[,sprintf("psi.%s.", 1:stan_data$N)] -->
-<!-- Psi <- post_mix[,"Psi"] %>%  -->
-<!--   boot::inv.logit() -->
+#get theta params
+lambdas <- post_mix[, sprintf("lambda_mean.%s.", 1:3)] %>%
+  exp()
+thetas <- post_mix[, sprintf("theta_mean.%s.", 1:6)] %>%
+  exp()
+psi <- post_mix[,sprintf("psi.%s.", 1:stan_data$N)]
+Psi <- post_mix[,"Psi"] %>%
+  boot::inv.logit()
 
-<!-- ## Get predictions from input values -->
-<!-- xs <- seq(0, 100, 2) -->
+## Get predictions from input values
+xs <- seq(0, 100, 2)
 
-<!-- #Estimated mean logistic curves -->
-<!-- y_est_A <- -->
-<!--   sapply(xs, function(x) -->
-<!--     logistic5( -->
-<!--       t1 = lambdas[, 1], -->
-<!--       t2 = lambdas[, 2], -->
-<!--       t3 = lambdas[, 3], -->
-<!--       t4 = lambdas[, 4], -->
-<!--       t5 = lambdas[, 5], -->
-<!--       x = x, -->
-<!--       0 -->
-<!--     )) %>% -->
-<!--   colMeans -->
+#Estimated mean logistic curves
+y_est_A <-
+  sapply(xs, function(x)
+    logistic3(
+      t1 = lambdas[, 1],
+      t2 = lambdas[, 2],
+      t3 = lambdas[, 3],
+      x = x,
+      0
+    )) %>%
+  colMeans
 
-<!-- y_est_B <- -->
-<!--   sapply(xs, function(x) -->
-<!--     logistic6( -->
-<!--       t1 = thetas[, 1], -->
-<!--       t2 = thetas[, 2], -->
-<!--       t3 = thetas[, 3], -->
-<!--       t4 = thetas[, 4], -->
-<!--       t5 = thetas[, 5], -->
-<!--       t6 = thetas[, 6], -->
-<!--       x = x, -->
-<!--       0 -->
-<!--     )) %>% -->
-<!--   colMeans -->
+y_est_B <-
+  sapply(xs, function(x)
+    logistic6(
+      t1 = thetas[, 1],
+      t2 = thetas[, 2],
+      t3 = thetas[, 3],
+      t4 = thetas[, 4],
+      t5 = thetas[, 5],
+      t6 = thetas[, 6],
+      x = x,
+      0
+    )) %>%
+  colMeans
 
-<!-- #Credible intervals -->
-<!-- y_ci_A <- -->
-<!--   sapply(xs, function(x) -->
-<!--     logistic5( -->
-<!--       t1 = lambdas[, 1], -->
-<!--       t2 = lambdas[, 2], -->
-<!--       t3 = lambdas[, 3], -->
-<!--       t4 = lambdas[, 4], -->
-<!--       t5 = lambdas[, 5], -->
-<!--       x = x, -->
-<!--       0 -->
-<!--     )) %>% -->
-<!--   hdi(0.95) -->
+#Credible intervals
+y_ci_A <-
+  sapply(xs, function(x)
+    logistic3(
+      t1 = lambdas[, 1],
+      t2 = lambdas[, 2],
+      t3 = lambdas[, 3],
+      x = x,
+      0
+    )) %>%
+  hdi(0.95)
 
-<!-- y_ci_B <- -->
-<!--   sapply(xs, function(x) -->
-<!--     logistic6( -->
-<!--       t1 = thetas[, 1], -->
-<!--       t2 = thetas[, 2], -->
-<!--       t3 = thetas[, 3], -->
-<!--       t4 = thetas[, 4], -->
-<!--       t5 = thetas[, 5], -->
-<!--       t6 = thetas[, 6], -->
-<!--       x = x, -->
-<!--       0 -->
-<!--     )) %>% -->
-<!--   hdi(0.95) -->
+y_ci_B <-
+  sapply(xs, function(x)
+    logistic6(
+      t1 = thetas[, 1],
+      t2 = thetas[, 2],
+      t3 = thetas[, 3],
+      t4 = thetas[, 4],
+      t5 = thetas[, 5],
+      t6 = thetas[, 6],
+      x = x,
+      0
+    )) %>%
+  hdi(0.95)
 
-<!-- dy = cbind(xs, -->
-<!--            c(y_est_A, y_est_B),  -->
-<!--            t(cbind(y_ci_A, y_ci_B)) -->
-<!--            ) %>% -->
-<!--   data.frame() -->
-<!-- dy$model <- rep(c("A","B"), each = nrow(dy)/2) -->
-<!-- names(dy) <- c("x","y","lower","upper","model") -->
+dy = cbind(xs,
+           c(y_est_A, y_est_B),
+           t(cbind(y_ci_A, y_ci_B))
+           ) %>%
+  data.frame()
+dy$component <- rep(c("A","B"), each = nrow(dy)/2)
+names(dy) <- c("x","y","lower","upper","component")
 
-<!-- a_prob = Psi %>% mean() %>% round(2) -->
-<!-- y_data$prob = colMeans(psi) -->
-<!-- y_data$z = ifelse(y_data$prob > 0.5, sprintf("A (%s)", a_prob), sprintf("B (%s)", 1-a_prob)) -->
-<!-- y_data$alpha = ifelse(y_data$prob > 0.5, y_data$prob, 1-y_data$prob) -->
+a_prob = Psi %>% mean() %>% round(2)
+a_prob_ci = Psi %>% hdi() %>% round(2)
+y_data$prob = colMeans(psi)
+label_A <- sprintf("A: \U03A8 = %s [%s-%s]", a_prob, a_prob_ci[1], a_prob_ci[2])
+label_B <- sprintf("B: 1-\U03A8 = %s [%s-%s]", 1-a_prob, 1-a_prob_ci[2], 1-a_prob_ci[1])
+y_data$process = ifelse(y_data$prob > 0.5, label_A, label_B)
+y_data$alpha = ifelse(y_data$prob > 0.5, y_data$prob, 1-y_data$prob)
+dy$process = ifelse(dy$component == "A", label_A, label_B)
 
-<!-- #Plot data and predictions -->
-<!-- ggplot() + -->
-<!--   theme_light() + -->
-<!--   ggtitle("NLME Mixture Model") + -->
-<!--   geom_point(data=y_data, aes(x=x, y=y, color=z), shape=1, size=1) + -->
-<!--   geom_line(data=dy, aes(x=x, y=y, color=model), show.legend=FALSE) + -->
-<!--   geom_ribbon(data=dy, aes(x=x, ymin=lower, ymax=upper, color=model), fill=alpha("white",0), linetype=2, size=0.5, show.legend = FALSE) + -->
-<!--   scale_color_viridis_d("Process", begin = 0.2, end=0.8) + -->
-<!--   scale_x_continuous("x") + -->
-<!--   scale_y_continuous("y") -->
-<!-- ``` -->
+#Plot data and predictions
+inset <- ggplot(data.frame(psi=Psi)) +
+  ggtitle("Posterior Distribution of \U03A8") +
+  annotate("text", x=min(psi)+0.2, y=28, label="R=300") +
+  geom_histogram(aes(x=psi), fill="orange2", color="gray50") +
+  theme_light() +
+  theme(axis.text = element_text(size=10),
+        axis.title = element_text(size=11),
+        plot.title = element_text(size=11)) +
+  scale_x_continuous(expression(paste("\U03A8",""[r],sep=""))) +
+  scale_y_continuous("Frequency")
 
-Combining NLME models in a mixture model is sure asking a lot from the optimizer. But, the NUTS algorithm and Stan language proved to be up to the task, and make the process of implementing highly customized models like these.
+ggplot(data=y_data, aes(x=x, y=y, color=process)) +
+  annotation_custom(as.grob(inset), xmin=0, xmax=40, ymin=35, ymax=Inf-10) +
+  theme_bw() +
+  theme(legend.position = "top",
+        legend.text=element_text(size=11)) +
+  ggtitle("NLME Mixture Model") +
+  geom_point(shape=1, size=1, show.legend = TRUE) +
+  geom_line(data=dy, aes(x=x, y=y, color=process), inherit.aes = FALSE, show.legend = FALSE) +
+  geom_ribbon(data=dy, aes(x=x, ymin=lower, ymax=upper, color=process), fill=alpha("white",0), linetype=2, size=0.5, show.legend = FALSE, inherit.aes = FALSE) +
+  scale_color_viridis_c("Process", begin = 0.2, end=0.8) +
+  scale_color_viridis_d("Process", begin = 0.2, end=0.8) +
+  scale_x_continuous("x") +
+  scale_y_continuous("y")
+
+
+#Check accuracy of predictions
+z_hat <- ifelse(y_data$prob > 0.5, "A", "B")
+correct <- z_hat == y_data$component
+table(estimated=z_hat, true=y_data$component) %>%
+  confusionMatrix()
+  
+```
+
+Overall, the model performed well in this test, accurately recovering almost 95% of the correct class labels from the input data. However, it is worth mentioning that this accuracy was greater for observations from component "B". Only 33 observations were misclassified as belonging to "A" when actually from "B" compared with 185 observations from "A" that were misclassified as "B". Combining NLME models in a mixture model is sure asking a lot from the optimizer. But, the NUTS algorithm and Stan language proved to be up to the task.
+
+There are some caveats worth mentioning. Getting this model to fit adequately required strong priors on all model parameters aided by informative starting values. Mixture models are notoriously difficult to fit and suffer from issues of identifiability (see ["label switching"](http://www.stat.columbia.edu/~cook/loken1.pdf)). Strong priors can help to alleviate some of thes problems. However, it is not always (or rarely ever) possible to have such strong prior information about a system to supply hyperparameter values as shown in this example. Therefore, much "tuning" could be required to use this code on real-world data, but even these steps do not guarantee optimal results. 
+
+As shown in the inset of the figure above, the posterior distribution of the mixture proportion $\psi$ was multimodal, although the mean estimate matched its true value of 0.25 ($\hat{\psi}$ = 0.25 [0.20-0.38]; 95% HPDI). I have found the mixture proportion parameter to be the most difficult to play well with the sampler, and so am not surprised that this is the case here, but it is worth mentioning as something to look out for.
 
 ## Stan Code
 
@@ -970,7 +999,102 @@ functions{
     mu_i = mu + sigma * nu
     nu ~ normal(0, 1)
     Same as: mu_i ~ normal(mu, sigma)
+    See: https://mc-stan.org/docs/2_24/stan-    if(K == 3){
+      y = logistic3(x, theta);
+    }
+    if(K == 5){
+      y = logistic5(x, theta);
+    }
+    if(K == 6){
+      y = logistic6(x, theta);
+    }
+    return y;
+  }
+  
+  vector nc_exp(vector mu, vector sigma, vector nu){
+    /* "Non-centering"" decomposition for multilevel parameters
+    mu_i = mu + sigma * nu
+    nu ~ normal(0, 1)
+    Same as: mu_i ~ normal(mu, sigma)
     See: https://mc-stan.org/docs/2_24/stan-users-guide/reparameterization-section.html
+    */
+    return exp(mu + sigma .* nu);
+  }
+  
+  vector nc_linear(vector mu, vector sigma, vector nu){
+    /* "Non-centering"" decomposition for multilevel parameters
+    mu_i = mu + sigma * nu
+    nu ~ normal(0, 1)
+    Same as: mu_i ~ normal(mu, sigma)
+    See: https://mc-stan.org/docs/2_24/stan-users-guide/reparameterization-section.html
+    */
+    return mu + sigma .* nu;
+  }
+
+}
+
+data{
+  
+  int N; // total num obs
+  int K; // number parameters
+  int I; // number of clusters
+  int id[N]; //index of cluster id
+  vector[N] x;
+  vector[N] y;
+  
+}
+
+parameters{
+  
+  real<lower=0> sigma; // error
+  vector[K] theta_mean; // pop. mean
+  vector<lower=0>[K] sigma_theta; // pop. var
+  vector[K] theta_norm[I]; // unit normals
+
+}
+
+transformed parameters{
+  
+  vector<lower=0>[K] theta_i[I]; // random effect coefficients
+  
+  for(i in 1:I){
+    theta_i[i] = nc_exp(theta_mean, sigma_theta, theta_norm[i]);
+  }
+
+}
+
+model{
+  
+  // loop over observations
+  for(n in 1:N){
+    real mu = logisticN(x[n], theta_i[id[n]]);
+    target += normal_lpdf(y[n] | mu, sigma); // increment log prob
+  }
+    
+  // priors
+  theta_mean ~ normal(0, 1);
+  sigma ~ normal(0, 1);
+  sigma_theta ~ normal(0, 1);
+  for(i in 1:I){
+    theta_norm[i] ~ normal(0, 1);
+  }
+  
+}
+
+generated quantities{
+
+  vector[N] y_hat; // predicted values
+  vector[N] log_lik; // log-likelihood
+
+  for(n in 1:N){
+    real mu;
+    mu = logisticN(x[n], theta_i[id[n]]);
+    y_hat[n] = normal_rng(mu, sigma);
+    log_lik[n] = normal_lpdf(y[n] | logisticN(x[n], theta_i[id[n]]), sigma);
+  }
+
+}
+users-guide/reparameterization-section.html
     */
     return mu + sigma .* nu;
   }

@@ -89,7 +89,8 @@ functions{
 data{
   
   int N; // total num obs
-  int K; // number parameters
+  int J; // number parameters in model A
+  int K; // number parameters in model B
   int I; // number of clusters
   int id[N]; // index of cluster id
   vector[N] x;
@@ -101,9 +102,9 @@ parameters{
   
   real Psi; // component mixture probability
   real<lower=0> sigma[2]; // component error
-  vector[K-1] lambda_mean; // pop. mean
-  vector<lower=0>[K-1] sigma_lambda; // pop. var
-  vector[K-1] lambda_norm[I]; // unit normals
+  vector[J] lambda_mean; // pop. mean
+  vector<lower=0>[J] sigma_lambda; // pop. var
+  vector[J] lambda_norm[I]; // unit normals
   vector[K] theta_mean; // pop. mean
   vector<lower=0>[K] sigma_theta; // pop. var
   vector[K] theta_norm[I]; // unit normals
@@ -112,19 +113,15 @@ parameters{
 
 transformed parameters{
 
-  vector<lower=0>[K-1] lambda_i[I]; // random effect coefficients  
+  vector<lower=0>[J] lambda_i[I]; // random effect coefficients  
   vector<lower=0>[K] theta_i[I]; // random effect coefficients
+  real Psi_logit = inv_logit(Psi);
+  vector[N] log_lik = rep_vector(-log(N), N);
 
   for(i in 1:I){
     lambda_i[i] = nc_exp(lambda_mean, sigma_lambda, lambda_norm[i]);
     theta_i[i] = nc_exp(theta_mean, sigma_theta, theta_norm[i]);
   }
-  
-}
-
-model{
-  
-  real Psi_logit = inv_logit(Psi);
   
   // loop over observations
   for(n in 1:N){
@@ -132,13 +129,28 @@ model{
     real log_lik1 = normal_lpdf(y[n] | mu1, sigma[1]);
     real mu2 = logisticN(x[n], theta_i[id[n]]);
     real log_lik2 = normal_lpdf(y[n] | mu2, sigma[2]);
-    target += log_mix(Psi_logit, log_lik1, log_lik2);
+    log_lik[n] = log_mix(Psi_logit, log_lik1, log_lik2);
+  }
+  
+}
+
+model{
+  
+  for(n in 1:N){
+    target += log_lik[n];
   }
   
   // priors
-  Psi ~ normal(-0.6, 1);
-  lambda_mean ~ normal(0, 1);
-  theta_mean ~ normal(0, 1);
+  Psi ~ normal(-0.6, 0.1);
+  lambda_mean[1] ~ normal(log(60), 0.1);
+  lambda_mean[2] ~ normal(log(50), 0.1);
+  lambda_mean[3] ~ normal(log(2.5), 0.1);
+  theta_mean[1] ~ normal(log(20), 0.1);
+  theta_mean[2] ~ normal(log(17), 0.1);
+  theta_mean[3] ~ normal(log(2), 0.1);
+  theta_mean[4] ~ normal(log(85), 0.1);
+  theta_mean[5] ~ normal(log(0.5), 0.1);
+  theta_mean[6] ~ normal(log(0.6), 0.1);
   sigma ~ normal(0, 1);
   sigma_lambda ~ normal(0, 1);
   sigma_theta ~ normal(0, 1);
@@ -152,19 +164,12 @@ model{
 generated quantities{
   
   vector[N] psi; // component membership probability by observation
-  real Psi_logit = inv_logit(Psi);
   
   for(n in 1:N){
     real mu1 = logisticN(x[n], lambda_i[id[n]]);
     real mu2 = logisticN(x[n], theta_i[id[n]]);
     real Pr_B_given_A = exp(normal_lpdf(y[n] | mu1, sigma[1]));
-    real Pr_B = exp(
-                  log_mix(Psi_logit, 
-                          normal_lpdf(y[n] | mu1, sigma[1]),
-                          normal_lpdf(y[n] | mu2, sigma[2])
-                      )
-                  );
-    psi[n] = (Psi_logit * Pr_B_given_A) / Pr_B;
+    psi[n] = (Psi_logit * Pr_B_given_A) / exp(log_lik[n]);
   }
   
 }
