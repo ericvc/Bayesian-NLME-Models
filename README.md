@@ -21,10 +21,10 @@ the model parameters can be interpreted. For example, in many cases,
 model parameters will correspond to important locations along the
 support axis where the midpoint or other key features of a logistic
 curve occur. Pinheiro and Bates (2000) also show that these models can
-be easily extended to incorporate hierachical data structures. For these
-reasons, I generally prefer NLME models over non-parametric methods for
-fitting nonlinear curves, such as splines or generalized additive
-models.
+be easily extended to incorporate hierarchical data structures. For
+these reasons, I generally prefer NLME models over non-parametric
+methods for fitting nonlinear curves, such as splines or generalized
+additive models.
 
 In the past, a major drawback of NLMEs was that they could be difficult
 to fit using maximum likelihood or related optimization methods due to
@@ -42,7 +42,7 @@ have largely circumvented these issues. The latest MCMC sampling
 algorithms (e.g., No-U-Turn and Hamiltonian Monte Carlo) are capable of
 efficiently exploring the parameter space of even poorly behaved (i.e.,
 multimodal and non-Gaussian) model posteriors, and can therefore provide
-reliable estimates of mulitlevel parameters. Additionally, Bayesian
+reliable estimates of multilevel parameters. Additionally, Bayesian
 estimation of NLME models may also be less sensitive to poor choices of
 starting values. Using Stan, potential starting values for the algorithm
 are sampled from a parameter’s prior distribution (if none are provided
@@ -57,10 +57,34 @@ In the following sections I will cover:
 
   - Model fitting and evaluation with RStan
   - Model comparisons with WAIC
-  - Mixture models with nonlinear mixed-effect
-    components
+  - Mixture models with nonlinear mixed-effect components
 
-<!-- end list -->
+## Model Fitting
+
+Each of the models presented here are variations of the logistic
+(sigmoid) curve:
+
+  - Three Parameters: The standard logistic curve with multilevel
+    parameters
+  - Five Parameters: Two logistic curves added together, with differing
+    rates and midpoints but a shared upper *y* limit
+  - Six Parameters: Two logistic curves added together, with differing
+    rates, midpoints, and *y* values of their lower asymptote(s)
+
+The parameters of the logistic curves (𝜃) are modeled as random-effects.
+
+![](figures/mm.gif)
+
+The Stan model used here also uses non-centering for estimation of the
+multilevel parameters. More details about non-centering and how it can
+improve model fitting are described in [Chapter 22.7 of the Stan
+Language
+Manual](https://mc-stan.org/docs/2_24/stan-users-guide/reparameterization-section.html).
+
+All models were estimated using Stan and RStan API package for R. Before
+launching into model-fitting, some critical packages need to be loaded
+and hyperparameter options
+    set.
 
 ``` r
 library(rstan)
@@ -128,7 +152,7 @@ library(caret)
 ``` r
 #Define Stan model fitting options
 rstan_options(auto_write = TRUE) #saves compiled stan model to storage
-options(mc.cores = parallel::detectCores()) #uses multicore processing
+options(mc.cores = parallel::detectCores()) #uses   multicore processing
 
 #Parameters to monitor
 sample_pars <-
@@ -148,40 +172,13 @@ control. <- list(
 )
 ```
 
-## Model Fitting
-
-Each of the models presented here are variations of the logistic
-(sigmoid) curve:
-
-  - Three Paramters: The standard logistic curve with multilevel
-    parameters
-  - Five Parameters: Two logistic curves added together, with differing
-    rates and midpoints but a shared upper *y* limit
-  - Six Parameters: Two logistic curves added together, with differing
-    rates, midpoints, and *y* values of their lower asymptote(s)
-
-The parameters of the logistic curves (“thetas”) are modeled as
-random-effects.
-
-![](figures/mm.gif)
-
-The Stan model used here also uses non-centering for estimation of
-multilevel parameters. More details about non-centering and how it can
-improve model fitting are described in [Chapter 22.7 of the Stan
-Language
-Manual](https://mc-stan.org/docs/2_24/stan-users-guide/reparameterization-section.html).
-
-The models were estimated using Stan and RStan API package for R. Before
-launching into model-fitting, some critical packages need to be loaded
-and hyperparameter options need to be set.
-
 ### Three Parameter Model
 
 The traditional logistic curve is used for modeling all sorts of data,
 and you may also recognize it as the same function used as the
 activation for an output layer of a neural net binary classifier. One
 area where logistic curves are commonly applied is to model the growth
-trajectories of plants and animals. Many mammals in particualar exhibit
+trajectories of plants and animals. Many mammals in particular exhibit
 patterns of growth from birth to maturation resembling sigmoid curves:
 an initial period of slow, steady growth followed by a intermediate
 stage of rapid development that eventually slows before ceasing around
@@ -304,22 +301,22 @@ predicted height of trees at early stages of development and
 under-predict heights at intermediate stages (e.g, around 10 years of
 age). As mentioned before, interpreting the model parameters in light of
 the original data is a cinch, requiring no transformations back to an
-original scale. For example, the population mean of \(\bar{\theta}_1\)
-(green) corresponds to the predicted upper limit of the height of
-Loblolly pine trees, which is estimated here to be 61.4 feet (95%
-highest posterior density interval: 59.0-65.4). Growth is most rapid
-near the midpoint of the curve, and the coordinate position of this
-point on the x-axis is given from the parameter \(\bar{\theta}_2\)
-(purple). This model predicts that the midpoint of tree growth occurs at
-roughly 11.8 years (95% HPDI: 11.3-12.3) of age.
+original scale. For example, the population mean of 𝜃₁ (green)
+corresponds to the predicted upper limit of the height of Loblolly pine
+trees, which is estimated here to be 61.4 feet (95% highest posterior
+density interval: 59.0-65.4). Growth is most rapid at ages near the
+midpoint of the curve, and the coordinate position of this point on the
+x-axis is given from the parameter 𝜃₂ (purple). This model predicts that
+the midpoint of tree growth occurs at roughly 11.8 years (95% HPDI:
+11.3-12.3) of age.
 
 ### Five Parameter Model
 
-The five parameter logistic model is actually the difference of two
-logistic curves, each sharing a common upper *y* limit but different
-characteristic growth rates and midpoints. First, I will generate some
-fake data, with random noise, in order to illustrate what such a curve
-might appear like.
+The five parameter logistic model is actually the sum of two logistic
+curves, each sharing a common upper *y* limit but differing
+characteristic midpoint and rate parameters. First, I will generate some
+fake data, with random noise, in order to illustrate how such a curve
+might appear..
 
 ``` r
 #Five parameter logistic function with random noise (tau) parameter
@@ -367,8 +364,8 @@ foraging routes influenced the timing, maximum displacement, and degree
 of individual variation in observed movement behavior.
 
 Here, I fit the Stan model to the example data generated above. Again,
-we must first put our data into a list for Stan before running the
-model.
+we must first put our data into a ‘list’ object for Stan before running
+the model.
 
 ``` r
 stan_data <- list(
@@ -484,10 +481,10 @@ ggplot() +
 This version is actually a modified version of the five parameter model,
 and was not included in Pinheiro and Bates (2000). Like the previous
 model, the function is simply two logistic curves added together, but
-with an extra parameter \(\theta_6 > 0\) that adjusts the location of
-the lower asymptote on the right curve relative to the position of the
-lower asymptote of the left curve. As before, I will generate some
-example data, with added random noise, and fit the model.
+with an extra parameter $𝜃₆ \> 0)at adjusts the location of the lower
+asymptote on the right curve relative to the position of the lower
+asymptote of the left curve. As before, I will generate some example
+data, with added random noise, and fit the model.
 
 ``` r
 logistic6 <- function(t1, t2, t3, t4, t5, t6, x, tau){
@@ -599,10 +596,10 @@ ggplot() +
 In some cases, it may be difficult to tell at a glance whether a five or
 six parameter curve is more appropriate for our data. In certain cases,
 the five parameter model could suffice without the potential for
-overfitting. However, the six-parameter version might also be considered
-for reasons related to the data generating process, where a better fit
-to the more complex model could serve as evidence in support of a
-hypothesis concerning the generating process.
+over-fitting. However, the six-parameter version might also be
+considered for reasons related to the data generating process, where a
+better fit to the more complex model could serve as evidence in support
+of a hypothesis concerning the generating process.
 
 One approach is to fit the same data to both models, and then assess
 their relative fit using an information criterion. In the calculation of
@@ -615,54 +612,37 @@ then define an R function to calculate the model WAIC directly from the
 `stanfit` object.
 
 ``` r
-colVars <- function (a){
-  diff <- a - matrix (colMeans(a), nrow(a), ncol(a), byrow=TRUE)
-  vars <- colMeans (diff^2)*nrow(a)/(nrow(a)-1)
+colVars <- function (a) {
+  diff <- a - matrix (colMeans(a), nrow(a), ncol(a), byrow = TRUE)
+  vars <- colMeans (diff^2) * nrow(a) / (nrow(a)-1)
   return (vars)
 }
 
-#Returns lppd, p_waic_1, p_waic_2, and waic
-waic <- function (stanfit){
+waic <- function (stanfit) {
   log_lik <- rstan::extract (stanfit, "log_lik")$log_lik
-  lppd <- sum (log (colMeans(exp(log_lik))))
-  p_waic_1 <- 2*sum (log(colMeans(exp(log_lik))) - colMeans(log_lik))
-  p_waic_2 <- sum (colVars(log_lik))
-  waic_2 <- -2*lppd + 2*p_waic_2
-  return (list (waic=waic_2, p_waic=p_waic_2, lppd=lppd, p_waic_1=p_waic_1))
+  lppd <- sum(log(colMeans(exp(log_lik))))
+  p_waic <- sum(colVars(log_lik))
+  waic <- -2 * lppd + 2 * p_waic
+  return(list(
+    waic = waic,
+    lppd = lppd,
+    p_waic = p_waic
+  ))
 }
 ```
 
 The simulated generating process used here is intended to fit best to a
 six-parameter logistic curve, but whose shape will also be reasonably
 approximated by the five-parameter model. This is achieved by setting
-the value of \(\theta_6 = 0.95\).
+the value of $₆ =0.95.{r waic\_data} \#Generate data from this function
+x \<- seq(0, 100, by = 2) \#x-axis values y\_data = list() n\_curves \<-
+20 for(i in 1:n\_curves){ set.seed(i^2) x = x t1 = 55 t2 = 25 t3 = 2 t4
+= 75 t5 = 2.5 t6 = 0.95 y\_data\[\[i\]\] = logistic6(t1, t2, t3, t4, t5,
+t6, x, tau = 5) }
 
-``` r
-#Generate data from this function
-x <- seq(0, 100, by = 2) #x-axis values
-y_data = list()
-n_curves <- 20
-for(i in 1:n_curves){
-  set.seed(i^2)
-  x = x
-  t1 = 55
-  t2 = 25
-  t3 = 2
-  t4 = 75
-  t5 = 2.5
-  t6 = 0.95
-  y_data[[i]] = logistic6(t1, t2, t3, t4, t5, t6, x, tau = 5)
-}
-
-y_data <- y_data  %>% 
-  melt() %>%
-  mutate(x=rep(seq(0, 100, by = 2), times=20))
-names(y_data) <- c("y","id","x")
-qplot(x=x, y=y, data=y_data, group=id) + 
-  ggtitle("Generated Data")
-```
-
-![](README_files/figure-gfm/waic_data-1.png)<!-- -->
+y\_data \<- y\_data %\>% melt() %\>% mutate(x=rep(seq(0, 100, by = 2),
+times=20)) names(y\_data) \<- c(“y”,“id”,“x”) qplot(x=x, y=y,
+data=y\_data, group=id) + ggtitle(“Generated Data”) \`\`\`
 
 Now, these data are fitted to both the five and six parameter models.
 Note, all that is needed is to change the value of `stan_data$K` from 5
@@ -677,6 +657,19 @@ stan_data <- list(
   x = y_data$x,
   y = y_data$y
 )
+
+#Function to pass initial values
+initList <- function(chain_id){
+  list(
+    "theta[1]" = rep(log(50), stan_data$I),
+    "theta[2]" = rep(log(1), stan_data$I),
+    "theta[3]" = rep(log(10), stan_data$I),
+    "theta[4]" = rep(log(50), stan_data$I),
+    "theta[5]" = rep(log(10), stan_data$I),
+    "theta[6]" = rep(log(0.65), stan_data$I)
+  )
+}
+
 
 five <- stan(
   verbose = FALSE,
@@ -777,21 +770,23 @@ y_ci6 <-
     )) %>%
   hdi(0.95)
 
+#Plotting data
 dy = cbind(xs,
            c(y_est5, y_est6), 
            t(cbind(y_ci5, y_ci6))
            ) %>%
   data.frame()
-dy$model <- rep(c("Five","Six"), each = nrow(dy)/2)
+dy$model <- rep(c("5","6"), each = nrow(dy)/2)
 names(dy) <- c("x","y","lower","upper","model")
 
 ggplot() +
   theme_light() +
+  theme(legend.title = element_text(size=9)) +
   ggtitle("5- and 6-Parameter Logistic Models") +
   geom_point(data=y_data, aes(x=x, y=y), color="gray10", shape=1, size=1) +
   geom_line(data=dy, aes(x=x, y=y, color=model), size=1) +
   geom_ribbon(data=dy, aes(x=x, ymin=lower, ymax=upper, color=model), fill=alpha("white",0), linetype=2, size=0.5, show.legend = FALSE) +
-  scale_color_viridis_d(begin = 0.4, end=0.8) +
+  scale_color_viridis_d("Parameters", begin = 0.4, end=0.8) +
   scale_x_continuous("x") +
   scale_y_continuous("y")
 ```
@@ -811,9 +806,9 @@ sapply(list(five, six), waic) %>%
   t()
 ```
 
-    ##      waic     p_waic   lppd      p_waic_1
-    ## [1,] 6200.801 17.89129 -3082.509 17.30496
-    ## [2,] 6151.021 20.93063 -3054.58  20.33366
+    ##      waic     lppd      p_waic  
+    ## [1,] 6724.446 -3287.86  74.3626 
+    ## [2,] 6206.818 -3031.846 71.56245
 
 From this table, we see that the six parameter model provides a better
 relative fit to the data (**WAIC = 6151**) than the five parameter
@@ -821,11 +816,11 @@ alternative (**WAIC = 6201**), despite the greater complexity.
 
 ## Mixture Model with NLME Components
 
-Imagine observations produced by two separate generating processes,
-process A occuring at a rate of (\(\psi\)) and process B at
-(\(1-\psi\)). Furthermore, let us assume that process A produces data
-that can be readily modeled by a three parameter logistic model,
-described here, and process B by a six parameter curve.
+Imagine observations produced by two separate generating processes, with
+process A occurring in proportion \(\psi\) to process B. Furthermore,
+let us assume that process A produces data that can be readily modeled
+by a three parameter logistic model, described here, and process B by a
+six parameter curve.
 
 ``` r
 xs <- seq(0, 100, by = 2)
@@ -896,10 +891,11 @@ probabilities for each observation using Bayes’ theorem:
 ![](figures/bayes.gif)
 
 The code for calculating component membership probabilities is found in
-the `generated quantities` block. Once fitted, each observation *n* can
-be assigned membership to a model component *z* by averaging over the
-*R* membership probabilities from each realization *r* (sample) from the
-model posterior:
+the `generated quantities` block of the Stan file
+`non_linear_mixture.stan`. Once fitted, each observation can be assigned
+membership to a model component *z* by averaging over the *R* membership
+probabilities from each realization *r* (sample) from the model
+posterior:
 
 ![](figures/psi_hat.gif)
 
@@ -1073,7 +1069,6 @@ ggplot(data=y_data, aes(x=x, y=y, color=process)) +
 ``` r
 #Check accuracy of predictions
 z_hat <- ifelse(y_data$prob > 0.5, "A", "B")
-correct <- z_hat == y_data$component
 table(estimated=z_hat, true=y_data$component) %>%
   confusionMatrix()
 ```
@@ -1109,8 +1104,8 @@ table(estimated=z_hat, true=y_data$component) %>%
 Overall, the model performed well in this test, accurately recovering
 almost 95% of the correct class labels from the input data. However, it
 is worth mentioning that this accuracy was greater for observations from
-component “B”. Only 33 observations were misclassified as belonging to
-“A” when actually from “B” compared with 185 observations from “A”
+component “B”. Only 33 observations were wrongly classified as belonging
+to “A” when actually from “B” compared with 185 observations from “A”
 that were misclassified as “B”. Combining NLME models in a mixture model
 is sure asking a lot from the optimizer. But, the NUTS algorithm and
 Stan language proved to be up to the task.
